@@ -1,5 +1,4 @@
 import os
-import shutil
 import vertexai
 from vertexai.preview.generative_models import GenerativeModel, Part, Image
 
@@ -18,7 +17,7 @@ generative_multimodal_model = GenerativeModel("gemini-2.0-flash-lite-001")
 PROMPT = """
 Describe this photo as if it's a professional headshot for use in an AI art prompt. Include hair type, gender if obvious, camera angle, lighting, background, and anything that helps guide a LoRA model.
 
-Don't include details about face details, expressions, or emotions. Focus on clothing and overall appearance.
+Don't include details about specific race (just identify skin-tone), face details, expressions, or emotions. Focus on clothing and overall appearance.
 
 Keep it short and readable, no markdown or special characters, just plain text.
 The caption should be concise, ideally under 50 words, and suitable for training an AI model.

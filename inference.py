@@ -1,9 +1,33 @@
-from diffusers import StableDiffusionXLPipeline, DPMSolverMultistepScheduler
+from diffusers import StableDiffusionXLInpaintPipeline, DPMSolverMultistepScheduler # type: ignore
 import torch
+from PIL import Image # Added for loading images
+import os
+from datetime import datetime
 
+from format_image import format_image
+
+# --- Configuration ---
 model_id = "stabilityai/stable-diffusion-xl-base-1.0"
+lora_path = "headshot.safetensors" 
 
-pipe = StableDiffusionXLPipeline.from_pretrained(
+base_dir = os.path.dirname(os.path.abspath(__file__))
+input_image_path = os.path.join(base_dir, "chaewon.jpg")
+tmp_inference_image_filename = "formatted_inference_image.jpg"
+
+tmp_dir = os.path.join(base_dir, "tmp")
+os.makedirs(tmp_dir, exist_ok=True)
+
+prompt = "mahitm-headshot-v1, Professional headshot of a person, wearing a suit"
+output_dir = "output/inpainting_inference"
+num_images_to_generate = 5
+image_width = 1024
+image_height = 1024
+guidance_scale_val = 1.0
+num_inference_steps_val = 30
+lora_alpha = 1.0
+
+print("Loading pipeline...")
+pipe = StableDiffusionXLInpaintPipeline.from_pretrained(
     model_id,
     torch_dtype=torch.float16,
     variant="fp16",
@@ -12,37 +36,71 @@ pipe = StableDiffusionXLPipeline.from_pretrained(
 pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
 pipe.safety_checker = None
 pipe = pipe.to("cuda")
+print("Pipeline loaded.")
 
+# --- Load LoRA ---
 from diffusers.utils.import_utils import is_safetensors_available
+if not is_safetensors_available():
+    raise ImportError("Please install safetensors to load LoRA weights (pip install safetensors)")
 
-if is_safetensors_available():
-    from safetensors.torch import load_file
-else:
-    raise ImportError("Please install safetensors to load LoRA weights.")
-
-lora_path = "headshot.safetensors"
-
-lora_state_dict = load_file(lora_path)
-pipe.load_lora_weights(lora_path, alpha=1)  # alpha is the scaling factor, adjust as needed
+print(f"Loading LoRA weights from: {lora_path}")
+pipe.load_lora_weights(lora_path, weight_name=os.path.basename(lora_path), adapter_name="headshot_lora") 
+pipe.set_adapters(["headshot_lora"])
+print("LoRA weights loaded.")
 
 pipe.enable_model_cpu_offload()
 pipe.enable_attention_slicing()
 pipe.enable_xformers_memory_efficient_attention()
 torch.backends.cuda.matmul.allow_tf32 = True
+print("Optimizations applied.")
 
-prompt = "Professional headshot, woman, long black wavy hair, medium shot. Slightly angled camera, soft lighting, white shirt, and a plain gray background."
-output_dir = "output/lora"
+# --- Load Input Image and Mask ---
+print(f"Loading input image from: {input_image_path}")
+try:
+    init_image = format_image(Image.open(input_image_path), size=image_width)
+    init_image.save(os.path.join(tmp_dir, tmp_inference_image_filename))
+except FileNotFoundError:
+    print(f"ERROR: Input image not found at {input_image_path}. Please provide a valid path.")
+    exit()
 
-import os
+print(f"Generating mask for input image...")
+
+# from mask_hair import process as mask_hair_process
+from mask import process as mask_process
+
+mask_process(filenames=[tmp_inference_image_filename],
+                    input_dir=tmp_dir,
+                    output_mask_dir=tmp_dir)
+
+mask_image = Image.open(os.path.join(tmp_dir, tmp_inference_image_filename)).convert("L").resize((image_width, image_height))
 
 os.makedirs(output_dir, exist_ok=True)
+print(f"Output directory: {output_dir}")
 
-from datetime import datetime
+# seed for reproducibility
+# generator = torch.Generator(device=pipe.device).manual_seed(1)
 
-width = 1024
-height = 1024
-
+print(f"Generating {num_images_to_generate} images...")
 with torch.inference_mode():
-  for i in range(5):
-    image = pipe(prompt, width=width, height=height, guidance_scale=1, num_inference_steps=30).images[0]
-    image.save(f"{output_dir}/output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+    for i in range(num_images_to_generate):
+        print(f"Generating image {i+1}/{num_images_to_generate}...")
+
+        image = pipe(
+            prompt=prompt,
+            image=init_image,
+            mask_image=mask_image,
+            width=image_width,
+            height=image_height,
+            guidance_scale=guidance_scale_val,
+            num_inference_steps=num_inference_steps_val,
+            # generator=generator,
+            cross_attention_kwargs={"scale": 1.0},
+            strength=0.9,
+        ).images[0] # type: ignore
+
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+        output_path = f"{output_dir}/output_{timestamp}_{i+1}.png"
+        image.save(output_path)
+        print(f"Saved image to {output_path}")
+
+print("Image generation complete.")

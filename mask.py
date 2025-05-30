@@ -3,30 +3,19 @@ import numpy as np
 import os
 import mediapipe as mp
 
-input_dir = "training_images"
-output_mask_dir = "training_masks"
-
-os.makedirs(output_mask_dir, exist_ok=True)
-
-mp_face_mesh = mp.solutions.face_mesh
-face_mesh = mp_face_mesh.FaceMesh(static_image_mode=True)
-
-for filename in os.listdir(input_dir):
-    if not filename.lower().endswith((".png", ".jpg", ".jpeg")):
-        continue
-
+def generate_mask(input_dir, filename, output_dir, face_mesh):
     img_path = os.path.join(input_dir, filename)
     image = cv2.imread(img_path)
     if image is None:
         print(f"Failed to load {filename}")
-        continue
+        return
 
     height, width, _ = image.shape
     results = face_mesh.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
 
     if not results.multi_face_landmarks:
         print(f"No face detected in {filename}")
-        continue
+        return
 
     # Create white mask
     mask = np.ones((height, width), dtype=np.uint8) * 255
@@ -39,11 +28,36 @@ for filename in os.listdir(input_dir):
         hull = cv2.convexHull(np.array(points))
         
         # Fill polygon with black (face area)
-        cv2.fillConvexPoly(mask, hull, 0)
+        cv2.fillConvexPoly(mask, hull, 0) # type: ignore
 
     # Optional: blur edges for smooth transition
     mask = cv2.GaussianBlur(mask, (31, 31), 0)
 
-    mask_output_path = os.path.join(output_mask_dir, filename)
+    mask_output_path = os.path.join(output_dir, filename)
     cv2.imwrite(mask_output_path, mask)
     print(f"Mask saved: {mask_output_path}")
+
+def process(filenames: list[str], input_dir, output_mask_dir):
+    os.makedirs(output_mask_dir, exist_ok=True)
+    
+    print(f"Processing images from: {input_dir}")
+    print(f"Saving masks to: {output_mask_dir}")
+
+    mp_face_mesh = mp.solutions.face_mesh # type: ignore
+    face_mesh = mp_face_mesh.FaceMesh(static_image_mode=True)
+
+    for filename in filenames:
+        generate_mask(input_dir, filename, output_mask_dir, face_mesh)
+
+    face_mesh.close()
+    print("Processing complete.")
+
+
+if __name__ == "__main__":
+    input_dir = "training_images"
+    output_mask_dir = "training_masks"
+
+    filenames = [filename for filename in os.listdir(input_dir) if filename.lower().endswith((".png", ".jpg", ".jpeg"))]
+    
+    process(filenames, input_dir, output_mask_dir)
+    print("Mask generation complete.")

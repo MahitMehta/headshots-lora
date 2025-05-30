@@ -1,16 +1,21 @@
-# Ignore environment variables
+# ignore environment variables
 .envrc
 
 # generated files
 output/
 .venv
 training_data/
+training_masks/
+training_masks_hair/
 *.safetensors
+tmp
 
-# Ignore Python cache files
+# ignore Python cache files
 __pycache__/
 *.py[cod]
 
 # config
 .vscode
 
+# misc
+training_raw
