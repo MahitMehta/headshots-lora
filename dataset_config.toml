@@ -1,0 +1,13 @@
+[general]
+caption_extension = ".txt"
+shuffle_caption = true
+keep_tokens = 1
+
+[[datasets]]
+resolution = [1024, 1024]
+batch_size = 1
+
+[[datasets.subsets]]
+image_dir = "C:\\Users\\mahit\\Documents\\stable-diffusion\\training_data\\images"
+conditioning_data_dir = "C:\\Users\\mahit\\Documents\\stable-diffusion\\training_data\\masks"
+num_repeats = 10

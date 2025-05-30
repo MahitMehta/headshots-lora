@@ -1,0 +1,16 @@
+# Ignore environment variables
+.envrc
+
+# generated files
+output/
+.venv
+training_data/
+*.safetensors
+
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
+
+# config
+.vscode
+
