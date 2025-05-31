@@ -8,6 +8,6 @@ resolution = [1024, 1024]
 batch_size = 1
 
 [[datasets.subsets]]
-image_dir = "C:\\Users\\mahit\\Documents\\stable-diffusion\\training_data\\images"
-conditioning_data_dir = "C:\\Users\\mahit\\Documents\\stable-diffusion\\training_data\\masks"
+image_dir = "C:\\Users\\mahit\\Documents\\stable-diffusion\\train\\formatted_dataset\\images"
+conditioning_data_dir = "C:\\Users\\mahit\\Documents\\stable-diffusion\\train\\formatted_dataset\\masks"
 num_repeats = 10

@@ -1,1 +1,1 @@
-mahitm-headshot-v1, Professional headshot, man, fair skin, short dark hair. Angled, eye-level camera. Formal business attire: grey suit, white collared shirt, patterned tie. Gradient brown background. Studio lighting.
+mahitm-headshots-v1.1, Asian male, dark hair, light skin, minimal stubble, close-up camera angle, professional studio lighting, blurred office background, wearing black suit and white shirt, arms crossed, watch.

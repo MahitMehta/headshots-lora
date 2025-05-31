@@ -1,12 +1,20 @@
+from pathlib import Path
 import requests
 import os
 from PIL import Image
 from io import BytesIO
 
-from utils.format_image import format_image
+from utils.format_image import resize_pad_image
 
-PEXELS_API_KEY = "29BplWSE96Jeh7L9az6B7YQL2GebKlS5h9BDmZ9nyEFlqwsxnOcxc2em"
-OUTPUT_DIR = "training_images"
+from dotenv import load_dotenv
+load_dotenv()
+
+PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
+
+if not PEXELS_API_KEY:
+    raise ValueError("PEXELS_API_KEY is not set. Please set your Pexels API key.")
+
+OUTPUT_DIR = Path(__file__).parent / "pexels_images"
 MIN_SIZE = 1024
 PER_PAGE = 20
 TOTAL_PAGES = 10
@@ -31,7 +39,7 @@ def download_and_process():
                     continue
 
                 # crop to square from the top-center 
-                img = format_image(img)
+                img = resize_pad_image(img)
 
                 # Save image and caption
                 fname = f"img_{img_count:04d}"

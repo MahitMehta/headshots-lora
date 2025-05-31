@@ -1,1 +1,1 @@
-mahitm-headshot-v1, Professional headshot, male, medium dark skin tone. Close-up camera angle. Cropped to upper chest. Short dark hair. Formal business attire, suit and tie. Plain gray background. Bright lighting.
+mahitm-headshots-v1.1, Woman, dark skin tone, long black wavy hair, business suit, white shirt, over the shoulder pose, arms crossed, professional headshot, soft lighting, gray background

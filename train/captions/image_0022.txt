@@ -1,1 +1,1 @@
-mahitm-headshot-v1, Male, portrait headshot. Bald head, stubble beard. Medium skin tone. Wearing a navy pinstripe suit, white dress shirt, and maroon tie. Shot from a slight angle, soft studio lighting, neutral gray background.
+mahitm-headshots-v1.1, professional headshot, Asian female, long straight dark hair, medium skin tone, blue background, over the shoulder, navy blazer, white blouse, gold necklace

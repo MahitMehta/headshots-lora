@@ -1,1 +1,1 @@
-mahitm-headshot-v1, Professional headshot, female. Shoulder-length, straight hair with ombre. Medium skin tone. Wearing a white blazer over a black shirt and a delicate necklace. Soft lighting on a gray background. Medium camera angle.
+mahitm-headshots-v1.1, Blonde wavy hair, light skin, female, medium shot, eye-level, bright lighting, blurred city background, business suit, light blue button-down shirt, pearl necklace.

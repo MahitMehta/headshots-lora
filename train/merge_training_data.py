@@ -1,12 +1,13 @@
 import os
+from pathlib import Path
 import shutil
 
-image_folder = 'training_images'
-dst_folder = 'training_data/images'
-conditioning_folder = 'training_data/masks'
+image_folder = Path(__file__).parent / "images"
+dst_folder = Path(__file__).parent / "formatted_dataset" / "images"
+conditioning_folder = Path(__file__).parent / "formatted_dataset" / "masks"
 
-caption_folder = 'training_captions'
-mask_folder = 'training_masks'
+caption_folder = Path(__file__).parent / "captions"
+mask_folder = Path(__file__).parent / "masks"
 
 os.makedirs(dst_folder, exist_ok=True)
 os.makedirs(conditioning_folder, exist_ok=True)

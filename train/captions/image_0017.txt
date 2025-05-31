@@ -1,1 +1,1 @@
-mahitm-headshot-v1, Professional headshot of a man. Medium skin tone. Short, neatly styled hair. Dark suit, white shirt, patterned tie. Shoulder-up shot. Soft, diffused lighting. Dark gray gradient background. Camera angle is slightly above eye level.
+mahitm-headshots-v1.1, Professional headshot, male, dark skin, short textured hair, minimal beard, navy suit, white shirt, blue striped tie, off-center, over-the-shoulder, studio lighting, gray background

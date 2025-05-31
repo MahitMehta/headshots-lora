@@ -64,7 +64,7 @@ with image.imports():
     from diffusers import StableDiffusionXLInpaintPipeline, DPMSolverMultistepScheduler
     from PIL import Image
     from utils import mask
-    from utils.format_image import format_image
+    from utils.format_image import resize_pad_image
     import tempfile
     import os
 
@@ -122,7 +122,7 @@ class Model:
     def inference(self, prompt: str, input_image) -> bytes:
         print("Generating image with prompt:", prompt)
 
-        input_image = format_image(input_image, size=WIDTH)
+        input_image = resize_pad_image(input_image)
 
         tmp_dir = tempfile.gettempdir()
 

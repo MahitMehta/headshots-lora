@@ -1,1 +1,1 @@
-mahitm-headshot-v1, Professional headshot, woman, medium skin tone. Long, dark hair.  Camera angle is chest up. Wearing a navy suit jacket over a light blue collared shirt.  Lighting is soft.  Background gradient, light to dark.
+mahitm-headshots-v1.1, Professional headshot, male, dark skin, short dark hair, full beard, blue suit jacket, white dress shirt, striped tie, neutral gray background, medium camera angle, studio lighting, formal attire.

@@ -1,1 +1,1 @@
-mahitm-headshot-v1, Headshot, male, fair skin, short gray hair, glasses. Blue suit jacket over a white dress shirt. Shoulder-up shot, slightly angled camera. Soft lighting, gray background.
+mahitm-headshots-v1.1, Asian woman, fair skin, dark hair, shoulder-length, studio lighting, dark gray background, medium camera angle, burgundy sweater, checkered blazer, small pendant necklace

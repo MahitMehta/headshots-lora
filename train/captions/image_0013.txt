@@ -1,1 +1,1 @@
-mahitm-headshot-v1, Professional headshot, male, dark skin tone. Close-up, slightly above eye-level camera angle. Short, close-cropped hair. Wearing a navy suit, white shirt, and patterned tie. Soft lighting against a neutral gray backdrop.
+mahitm-headshots-v1.1, Professional headshot, dark skin tone, short black hair, slight stubble beard, male, three-quarter view, soft lighting, navy suit, patterned tie, white dress shirt, gray background.

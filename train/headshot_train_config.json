@@ -152,7 +152,7 @@
   "resume_from_huggingface": "",
   "sample_every_n_epochs": 0,
   "sample_every_n_steps": 10,
-  "sample_prompts": "mahitm-headshot-v1, Professional headshot of a person",
+  "sample_prompts": "mahitm-headshots-v1.1, Professional headshot of a person",
   "sample_sampler": "euler_a",
   "save_as_bool": false,
   "save_clip": false,
