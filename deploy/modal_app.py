@@ -29,6 +29,7 @@ image = (
         "libgl1",
     )
     .pip_install(
+        "peft==0.15.2",
         "opencv-python==4.11.0.86",
         "mediapipe==0.10.21",
         "pillow==11.2.1",
@@ -52,12 +53,20 @@ image = image.env(
     }
 )
 
+image = image.add_local_python_source(
+    "utils",
+)
+
 app = modal.App("headshots-app", image=image)
 
 with image.imports():
     import torch
     from diffusers import StableDiffusionXLInpaintPipeline, DPMSolverMultistepScheduler
-    from PIL.Image import Image
+    from PIL import Image
+    from utils import mask
+    from utils.format_image import format_image
+    import tempfile
+    import os
 
 SCALEDOWN_WINDOW = 5 * 60 # seconds
 TIMEOUT = 60 * 60  # 1 hour timeout for compilation
@@ -68,8 +77,11 @@ GUIDANCE_SCALE = 7.5
 WIDTH = 1024
 HEIGHT = 1024
 
+HG_HEADSHOTS_LORA_ID = "mahitm/mahitm-headshots-v1"
+HG_HEADSHOTS_WEIGHT_NAME = "headshot-step00001000.safetensors"
+
 @app.cls(
-    gpu="T4",
+    gpu="L4",
     scaledown_window=SCALEDOWN_WINDOW,
     timeout=TIMEOUT, 
     volumes={ 
@@ -97,17 +109,42 @@ class Model:
 
         pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
         pipe.safety_checker = None
+
+        print(f"Loading LoRA weights")
+        pipe.load_lora_weights(HG_HEADSHOTS_LORA_ID, weight_name=HG_HEADSHOTS_WEIGHT_NAME) 
+        print("LoRA weights loaded.")
+
         pipe = pipe.to("cuda") 
+
         self.pipe = optimize(pipe, compile=self.compile)
 
     @modal.method()
     def inference(self, prompt: str, input_image) -> bytes:
         print("Generating image with prompt:", prompt)
 
+        input_image = format_image(input_image, size=WIDTH)
+
+        tmp_dir = tempfile.gettempdir()
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
+            input_image.save(temp_file)
+            temp_file_path = temp_file.name
+            print(f"Saved input image to temporary file: {temp_file_path}")
+
+            # modify the input image in place, mask will be stored at the same location
+            mask.process(
+                filenames=[os.path.basename(temp_file_path)],
+                input_dir=tmp_dir,
+                output_mask_dir=tmp_dir
+            )
+            print(f"Generated mask for input image @ {tmp_dir}")
+
+        mask_image = Image.open(temp_file_path).convert("L").resize((WIDTH, HEIGHT))
+
         out = self.pipe(
             prompt=prompt,
             image=input_image,
-            mask_image=input_image,
+            mask_image=mask_image,
             width=WIDTH,
             height=HEIGHT,
             guidance_scale=GUIDANCE_SCALE,
@@ -127,21 +164,21 @@ def main(
     twice: bool = True,
     compile: bool = False,
 ):
-    input_image_path = "/Users/mahitmehta/Desktop/Misc/headshots-lora/training_images/image_0018.jpg"
-    input_image = Image.open(input_image_path)
+    input_image_path = Path(__file__).parent / "../train" / "images" / "image_0001.jpg"
+    input_image = Image.open(input_image_path).convert("RGB")
 
     t0 = time.time()
     image_bytes = Model(compile=compile).inference.remote(prompt, input_image)
-    print(f"🎨 first inference latency: {time.time() - t0:.2f} seconds")
+    print(f"First inference latency: {time.time() - t0:.2f} seconds")
 
     if twice:
         t0 = time.time()
         image_bytes = Model(compile=compile).inference.remote(prompt, input_image)
-        print(f"🎨 second inference latency: {time.time() - t0:.2f} seconds")
+        print(f"Second inference latency: {time.time() - t0:.2f} seconds")
 
     output_path = Path("/tmp") / "flux" / "output.jpg"
     output_path.parent.mkdir(exist_ok=True, parents=True)
-    print(f"🎨 saving output to {output_path}")
+    print(f"Saving output to {output_path}")
     output_path.write_bytes(image_bytes)
 
 def optimize(pipe, compile=True):
@@ -150,26 +187,16 @@ def optimize(pipe, compile=True):
 
     # switch memory layout to Torch's preferred, channels_last
     pipe.vae.to(memory_format=torch.channels_last)
-
+  
     if not compile:
         return pipe
 
-    # set torch compile flags
-    config = torch._inductor.config
-    config.disable_progress = False  # show progress bar
-    config.conv_1x1_as_mm = True  # treat 1x1 convolutions as matrix muls
-    # adjust autotuning algorithm
-    config.coordinate_descent_tuning = True
-    config.coordinate_descent_check_all_directions = True
-    config.epilogue_fusion = False  # do not fuse pointwise ops into matmuls
+    torch.set_float32_matmul_precision("high")
 
-    # tag the compute-intensive modules, the Transformer and VAE decoder, for compilation
-    pipe.transformer = torch.compile(
-        pipe.transformer, mode="max-autotune", fullgraph=True
-    )
+    # tag the compute-intensive modules, the VAE decoder, for compilation
     pipe.vae.decode = torch.compile(
         pipe.vae.decode, mode="max-autotune", fullgraph=True
     )
 
-    print("🔦 finished torch compilation")
+    print("Finished PyTorch compilation")
     return pipe

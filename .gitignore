@@ -4,9 +4,9 @@
 # generated files
 output/
 .venv
-training_data/
-training_masks/
-training_masks_hair/
+train/training_dataset/
+train/masks/
+train/masks_hair/
 *.safetensors
 tmp
 

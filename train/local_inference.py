@@ -1,10 +1,10 @@
 from diffusers import StableDiffusionXLInpaintPipeline, DPMSolverMultistepScheduler # type: ignore
 import torch
-from PIL import Image # Added for loading images
+from PIL import Image
 import os
 from datetime import datetime
 
-from format_image import format_image
+from utils.format_image import format_image
 
 # --- Configuration ---
 model_id = "stabilityai/stable-diffusion-xl-base-1.0"
@@ -66,7 +66,7 @@ except FileNotFoundError:
 print(f"Generating mask for input image...")
 
 #from mask_hair import process as mask_process
-from mask import process as mask_process
+from utils.mask import process as mask_process
 
 mask_process(filenames=[f"mask_{tmp_inference_image_filename}"],
                     input_dir=tmp_dir,

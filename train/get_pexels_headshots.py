@@ -3,7 +3,7 @@ import os
 from PIL import Image
 from io import BytesIO
 
-from format_image import format_image
+from utils.format_image import format_image
 
 PEXELS_API_KEY = "29BplWSE96Jeh7L9az6B7YQL2GebKlS5h9BDmZ9nyEFlqwsxnOcxc2em"
 OUTPUT_DIR = "training_images"
