@@ -1,1 +1,1 @@
-mahitm-headshot-v1, Formal headshot, side view. Male. Light skin tone. Short, neat hair. Wearing a dark suit, white shirt, and burgundy tie. Dark, textured background. Studio lighting.
+mahitm-headshots-v1.1, Professional headshot, male, caucasian, fair skin, neatly styled brown hair, slightly trimmed beard, angled shot, dark blue suit, white shirt, red tie, dark blue background, dramatic lighting.

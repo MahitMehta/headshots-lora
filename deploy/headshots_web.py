@@ -12,6 +12,7 @@ web_image = modal.Image.debian_slim().pip_install(
 
 app = modal.App("headshots-web", image=web_image)
 
+
 @app.function(image=web_image)
 @modal.fastapi_endpoint(method="POST")
 async def web_inference(prompt: str = Form(...), file: UploadFile = File(...)):
@@ -22,8 +23,5 @@ async def web_inference(prompt: str = Form(...), file: UploadFile = File(...)):
 
     request_id = str(uuid.uuid4())
     call = headshots_model.spawn(request_id, prompt=prompt, input_image=input_image)
-    
-    return { 
-        "call_id": call.object_id, 
-        "request_id": request_id 
-    }
+
+    return {"call_id": call.object_id, "request_id": request_id}

@@ -1,7 +1,11 @@
+from pathlib import Path
 import cv2
 import numpy as np
 import os
 import mediapipe as mp
+from PIL import Image
+
+from utils.format_image import resize_pad_image
 
 # --- Configuration ---
 segmentation_threshold = 0.5  # Threshold for selfie segmentation (0.0 to 1.0)
@@ -113,6 +117,14 @@ def generate_mask(input_dir, filename, output_dir, selfie_segmentation, face_mes
     mask_output_path = os.path.join(output_dir, filename)
     try:
         cv2.imwrite(mask_output_path, output_mask)
+
+        # add black borders to maintain 2:3 aspect ratio
+        padded_image = resize_pad_image(
+            Image.open(mask_output_path).convert("L"),  # Convert to grayscale
+            padding_color=(0, 0, 0),  # Black padding for masks
+        )
+        padded_image.save(mask_output_path)
+
         print(f"Mask saved: {mask_output_path}")
     except Exception as e:
         print(f"Failed to save mask for {filename}: {e}")
@@ -156,12 +168,14 @@ def process(
 
 
 if __name__ == "__main__":
-    input_dir = "training_images"
+    input_dir = Path(__file__).parent / "../train/images"
+
+    output_mask_dir = Path(__file__).parent / "../train/masks_hair"
+    os.makedirs(output_mask_dir, exist_ok=True)
+
     filenames = [
         filename
         for filename in os.listdir(input_dir)
         if filename.lower().endswith((".png", ".jpg", ".jpeg"))
     ]
-    process(
-        filenames=filenames, input_dir=input_dir, output_mask_dir="training_masks_hair"
-    )
+    process(filenames=filenames, input_dir=input_dir, output_mask_dir=output_mask_dir)

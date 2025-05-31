@@ -1,1 +1,1 @@
-mahitm-headshot-v1, Male headshot, slightly above eye-level camera angle. Grey hair, light skin tone. Wearing a black suit, black shirt, and black tie. Solid gray background. Clean professional lighting.
+mahitm-headshots-v1.1, Professional headshot, man, light skin tone, dark brown hair, well groomed, slight stubble, angled shot, light gray suit, white collared shirt, patterned tie, warm brown background, studio lighting.

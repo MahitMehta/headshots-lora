@@ -1,1 +1,1 @@
-mahitm-headshot-v1, Male, headshot, medium skin tone, dark hair styled back, black suit over white collared shirt. Shoulder-up shot, neutral gray background. Well-lit, angled camera shot.
+mahitm-headshots-v1.1, Asian male, dark hair styled back, clean shaven, light brown skin tone, suit, white collared shirt, dark blue tie, headshot, well-lit, blurred background with a window and out-of-focus lights.

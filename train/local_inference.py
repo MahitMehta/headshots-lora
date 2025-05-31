@@ -1,20 +1,20 @@
+from pathlib import Path
 from diffusers import StableDiffusionXLInpaintPipeline, DPMSolverMultistepScheduler  # type: ignore
 import torch
 from PIL import Image
 import os
 from datetime import datetime
 
-from utils.format_image import format_image
+from utils.format_image import resize_pad_image
 
 # --- Configuration ---
 model_id = "stabilityai/stable-diffusion-xl-base-1.0"
 lora_path = "headshot.safetensors"
 
-base_dir = os.path.dirname(os.path.abspath(__file__))
-input_image_path = os.path.join(base_dir, "training_data\\images\\image_0024.jpg")
+input_image_path = Path(__file__).parent / "images" / "image_0002.jpg"
 tmp_inference_image_filename = "inference_image.jpg"
 
-tmp_dir = os.path.join(base_dir, "tmp")
+tmp_dir = Path(__file__).parent / "../output" / "tmp"
 os.makedirs(tmp_dir, exist_ok=True)
 
 prompt = "mahitm-headshot-v1, professional headshot"
@@ -56,9 +56,9 @@ print("Optimizations applied.")
 # --- Load Input Image and Mask ---
 print(f"Loading input image from: {input_image_path}")
 try:
-    init_image = format_image(Image.open(input_image_path), size=image_width)
-    init_image.save(os.path.join(tmp_dir, f"mask_{tmp_inference_image_filename}"))
-    init_image.save(os.path.join(tmp_dir, f"cropped_{tmp_inference_image_filename}"))
+    input_image = resize_pad_image(Image.open(input_image_path))
+    input_image.save(os.path.join(tmp_dir, f"mask_{tmp_inference_image_filename}"))
+    input_image.save(os.path.join(tmp_dir, f"cropped_{tmp_inference_image_filename}"))
 except FileNotFoundError:
     print(
         f"ERROR: Input image not found at {input_image_path}. Please provide a valid path."
@@ -96,7 +96,7 @@ with torch.inference_mode():
         image = pipe(
             prompt=prompt,
             negative_prompt=negative_prompt,
-            image=init_image,
+            image=input_image,
             mask_image=mask_image,
             width=image_width,
             height=image_height,

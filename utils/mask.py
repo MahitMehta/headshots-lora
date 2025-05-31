@@ -2,6 +2,9 @@ import cv2
 import numpy as np
 import os
 import mediapipe as mp
+from PIL import Image
+
+from utils.format_image import resize_pad_image
 
 
 def generate_mask(input_dir, filename, output_dir, face_mesh):
@@ -38,6 +41,14 @@ def generate_mask(input_dir, filename, output_dir, face_mesh):
 
     mask_output_path = os.path.join(output_dir, filename)
     cv2.imwrite(mask_output_path, mask)
+
+    # add black borders to maintain 2:3 aspect ratio
+    padded_image = resize_pad_image(
+        Image.open(mask_output_path).convert("L"),  # Convert to grayscale
+        padding_color=(0, 0, 0),  # Black padding for masks
+    )
+    padded_image.save(mask_output_path)
+
     print(f"Mask saved: {mask_output_path}")
 
 
@@ -58,8 +69,10 @@ def process(filenames: list[str], input_dir, output_mask_dir):
 
 
 if __name__ == "__main__":
-    input_dir = "training_images"
-    output_mask_dir = "training_masks"
+    from pathlib import Path
+
+    input_dir = Path(__file__).parent / "../train/images"
+    output_mask_dir = Path(__file__).parent / "../train/masks"
 
     filenames = [
         filename

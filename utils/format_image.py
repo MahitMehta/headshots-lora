@@ -1,31 +1,51 @@
+from pathlib import Path
 from PIL.Image import Image as ImageType
-from PIL import Image
+from PIL import Image, ImageOps
+
+content_width = 682  # Width for 2:3 aspect ratio
+content_height = 1024
+final_size = 1024
 
 
-def format_image(img: ImageType, size: int = 1024) -> ImageType:
+# grey padding helps the model focus on the subject, not the borders
+def resize_pad_image(img: ImageType, padding_color=(127, 127, 127)) -> ImageType:
     """Format the image to a square (top-center crop)"""
 
-    min_edge = min(img.size)
-    left = (img.width - min_edge) // 2
-    top = 0
-    img = img.crop((left, top, left + min_edge, top + min_edge))
+    img = img.convert("RGB")
+    orig_w, orig_h = img.size
+    new_w = int(orig_w * content_height / orig_h)
+    resized = img.resize((new_w, content_height), Image.Resampling.LANCZOS)
 
-    img = img.resize((size, size), Image.LANCZOS)  # type: ignore
+    # Crop or pad width to 682 (centered)
+    if new_w > content_width:
+        left = (new_w - content_width) // 2
+        right = left + content_width
+        content = resized.crop((left, 0, right, content_height))
+    elif new_w < content_width:
+        delta_w = content_width - new_w
+        pad = (delta_w // 2, 0, delta_w - delta_w // 2, 0)
+        content = ImageOps.expand(resized, pad, fill=padding_color)
+    else:
+        content = resized
 
-    return img
+    final_pad = ((final_size - content_width) // 2, 0)
+    square = Image.new("RGB", (final_size, final_size), padding_color)
+    square.paste(content, (final_pad[0], final_pad[1]))
+
+    return square
 
 
 if __name__ == "__main__":
     import os
 
-    input_dir = "training_raw"
+    input_dir = Path(__file__).parent / "../train/images_raw"
 
-    output_dir = "training_images"
+    output_dir = Path(__file__).parent / "../train/images"
     os.makedirs(output_dir, exist_ok=True)
 
     for idx, filename in enumerate(os.listdir(input_dir)):
         if filename.endswith((".jpg", ".jpeg", ".png")):
             img = Image.open(os.path.join(input_dir, filename))
-            img = format_image(img).convert("RGB")
+            img = resize_pad_image(img).convert("RGB")
             img.save(os.path.join(output_dir, f"image_{idx:04d}.jpg"))
             print(f"Formatted and saved {filename}")

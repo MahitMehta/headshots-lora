@@ -65,7 +65,7 @@ with inference_image.imports():
     from diffusers import StableDiffusionXLInpaintPipeline, DPMSolverMultistepScheduler
     from PIL import Image
     from utils import mask
-    from utils.format_image import format_image
+    from utils.format_image import resize_pad_image
     import tempfile
     import os
 
@@ -121,7 +121,7 @@ class Model:
     def inference(self, prompt: str, input_image) -> bytes:
         print("Generating image with prompt:", prompt)
 
-        input_image = format_image(input_image, size=WIDTH)
+        input_image = resize_pad_image(input_image)
 
         tmp_dir = tempfile.gettempdir()
 
@@ -157,15 +157,16 @@ class Model:
         out.save(byte_stream, format="JPEG")
         return byte_stream.getvalue()
 
-inference_caller_image =  modal.Image.debian_slim().pip_install(
-    "pillow==11.2.1",
-    "supabase==2.15.2"
+
+inference_caller_image = modal.Image.debian_slim().pip_install(
+    "pillow==11.2.1", "supabase==2.15.2"
 )
 
+
 @app.function(
-        image=inference_caller_image,
-        secrets=[modal.Secret.from_name("supabase-credentials")]
-    )
+    image=inference_caller_image,
+    secrets=[modal.Secret.from_name("supabase-credentials")],
+)
 def inference(
     request_id: str,
     prompt: str,
@@ -188,13 +189,11 @@ def inference(
 
     bucket_name = "headshots"
     response = supabase.storage.from_(bucket_name).upload(
-        path=file_path,
-        file=output_bytes,
-        file_options={"content-type": "image/jpeg"}
+        path=file_path, file=output_bytes, file_options={"content-type": "image/jpeg"}
     )
 
     print("Uploaded output to:", response.full_path)
-       
+
 
 @app.local_entrypoint()
 def main(

@@ -1,25 +1,26 @@
 import os
+from pathlib import Path
 import vertexai
 from vertexai.preview.generative_models import GenerativeModel, Part, Image
 
-IMG_DIR = "training_images"
-OUTPUT_DIR = "training_captions"
+IMG_DIR = Path(__file__).parent / "images"
+OUTPUT_DIR = Path(__file__).parent / "captions"
 CAPTION_SUFFIX = ".txt"
 
 PROJECT_ID = "mahitm-headshots"
 REGION = "us-central1"
 
-MODEL_ID = "mahitm-headshot-v1"
+MODEL_ID = "mahitm-headshots-v1.1"
 
 vertexai.init(project=PROJECT_ID, location=REGION)
 generative_multimodal_model = GenerativeModel("gemini-2.0-flash-lite-001")
 
 PROMPT = """
-Describe this photo as if it's a professional headshot for use in an AI art prompt. Include hair type, gender if obvious, camera angle, lighting, background, and anything that helps guide a LoRA model.
+Describe this photo as if it's a professional headshot for use in an AI art prompt. Include hair type, skin tone, gender if obvious, camera angle, lighting, background, and anything that helps guide a LoRA model.
 
-Don't include details about specific race (just identify skin-tone), face details, expressions, or emotions. Focus on clothing and overall appearance.
+Don't include details abour face details (except minimal beard description), expressions, or emotions. Focus on clothing and overall appearance.
 
-Keep it short and readable, no markdown or special characters, just plain text.
+Keep it short and readable, no markdown or special characters, just plain text. All comma separated, no periods or other punctuation.
 The caption should be concise, ideally under 50 words, and suitable for training an AI model.
 """
 
@@ -45,14 +46,12 @@ def main():
         if filename.lower().endswith(".jpg"):
             base = os.path.splitext(filename)[0]
             caption_path = os.path.join(OUTPUT_DIR, base + CAPTION_SUFFIX)
-            copied_img_path = os.path.join(OUTPUT_DIR, filename)
-            img_path = os.path.join(IMG_DIR, filename)
 
             if os.path.exists(caption_path):
-                print(f"🟡 Skipping {filename} (already captioned)")
+                print(f"Skipping {filename} (already captioned)")
                 continue
 
-            print(f"🧠 Captioning {filename}...")
+            print(f"Captioning {filename}...")
             caption = generate_caption(os.path.join(IMG_DIR, filename))
             if caption:
                 # if not os.path.exists(copied_img_path):

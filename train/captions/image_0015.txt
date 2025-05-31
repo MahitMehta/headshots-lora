@@ -1,1 +1,1 @@
-mahitm-headshot-v1, Male headshot, medium skin tone. Short, dark hair. Wearing a black suit over a light pink dress shirt. Arms crossed. Studio lighting with a neutral grey background. Three-quarter camera angle, slightly from the side. A black watch is visible.
+mahitm-headshots-v1.1, Headshot, Asian male, dark hair, slicked back, medium skin tone, blue suit, white dress shirt, slightly angled camera, soft lighting, blurred blue and white background, minimal stubble

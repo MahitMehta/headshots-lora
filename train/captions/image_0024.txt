@@ -1,1 +1,1 @@
-mahitm-headshot-v1, Professional headshot, male, medium skin-tone. Short, dark, wavy hair and full beard. Shot from chest up at a slight angle. Wearing a blue blazer, white shirt, and patterned tie. Solid gray background. Well-lit studio shot.
+mahitm-headshots-v1.1, female, dark long straight hair, medium skin tone, navy suit with gold buttons, arms crossed, shoulder up shot, dark gray background, professional lighting, formal attire.

@@ -1,1 +1,1 @@
-mahitm-headshot-v1, Professional headshot, male, medium skin-tone. Salt and pepper hair, short style. Over the shoulder shot. Wearing glasses, white button-down shirt, and a blue plaid blazer. Soft lighting, white brick background.
+mahitm-headshots-v1.1, man, light skin, brown hair, close-up shot, glasses, neatly trimmed short beard, gray suit, white collared shirt, striped tie, formal business attire, studio lighting, neutral gradient gray background
