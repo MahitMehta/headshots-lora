@@ -3,6 +3,7 @@ import numpy as np
 import os
 import mediapipe as mp
 
+
 def generate_mask(input_dir, filename, output_dir, face_mesh):
     img_path = os.path.join(input_dir, filename)
     image = cv2.imread(img_path)
@@ -22,13 +23,15 @@ def generate_mask(input_dir, filename, output_dir, face_mesh):
 
     for face_landmarks in results.multi_face_landmarks:
         # Extract the 2D landmark points (normalized)
-        points = [(int(lm.x * width), int(lm.y * height)) for lm in face_landmarks.landmark]
+        points = [
+            (int(lm.x * width), int(lm.y * height)) for lm in face_landmarks.landmark
+        ]
 
         # Create a polygon mask using these points
         hull = cv2.convexHull(np.array(points))
-        
+
         # Fill polygon with black (face area)
-        cv2.fillConvexPoly(mask, hull, 0) # type: ignore
+        cv2.fillConvexPoly(mask, hull, 0)  # type: ignore
 
     # Optional: blur edges for smooth transition
     mask = cv2.GaussianBlur(mask, (31, 31), 0)
@@ -37,13 +40,14 @@ def generate_mask(input_dir, filename, output_dir, face_mesh):
     cv2.imwrite(mask_output_path, mask)
     print(f"Mask saved: {mask_output_path}")
 
+
 def process(filenames: list[str], input_dir, output_mask_dir):
     os.makedirs(output_mask_dir, exist_ok=True)
-    
+
     print(f"Processing images from: {input_dir}")
     print(f"Saving masks to: {output_mask_dir}")
 
-    mp_face_mesh = mp.solutions.face_mesh # type: ignore
+    mp_face_mesh = mp.solutions.face_mesh  # type: ignore
     face_mesh = mp_face_mesh.FaceMesh(static_image_mode=True)
 
     for filename in filenames:
@@ -57,7 +61,11 @@ if __name__ == "__main__":
     input_dir = "training_images"
     output_mask_dir = "training_masks"
 
-    filenames = [filename for filename in os.listdir(input_dir) if filename.lower().endswith((".png", ".jpg", ".jpeg"))]
-    
+    filenames = [
+        filename
+        for filename in os.listdir(input_dir)
+        if filename.lower().endswith((".png", ".jpg", ".jpeg"))
+    ]
+
     process(filenames, input_dir, output_mask_dir)
     print("Mask generation complete.")

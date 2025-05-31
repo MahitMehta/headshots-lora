@@ -15,6 +15,7 @@ QUERY = "professional headshot"
 headers = {"Authorization": PEXELS_API_KEY}
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+
 def download_and_process():
     img_count = 0
     for page in range(1, TOTAL_PAGES + 1):
@@ -23,14 +24,14 @@ def download_and_process():
         data = res.json()
         for photo in data.get("photos", []):
             try:
-                img_url = photo['src']['original']
+                img_url = photo["src"]["original"]
                 img = Image.open(BytesIO(requests.get(img_url).content)).convert("RGB")
-                
+
                 # Skip tiny images
                 if img.width < MIN_SIZE or img.height < MIN_SIZE:
                     continue
 
-                # crop to square from the top-center 
+                # crop to square from the top-center
                 img = format_image(img)
 
                 # Save image and caption
@@ -42,6 +43,7 @@ def download_and_process():
 
             except Exception as e:
                 print(f"⚠️ Error: {e}")
+
 
 if __name__ == "__main__":
     download_and_process()

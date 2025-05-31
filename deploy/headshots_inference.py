@@ -2,13 +2,14 @@ import time
 from io import BytesIO
 from pathlib import Path
 from PIL import Image
+import os
 
 import modal
 
 # should be no greater than host CUDA version
-cuda_version = "12.4.0" 
+cuda_version = "12.4.0"
 # includes full CUDA toolkit
-flavor = "devel"  
+flavor = "devel"
 operating_sys = "ubuntu22.04"
 tag = f"{cuda_version}-{flavor}-{operating_sys}"
 
@@ -18,7 +19,7 @@ cuda_dev_image = modal.Image.from_registry(
 
 diffusers_commit_sha = "81cf3b2f155f1de322079af28f625349ee21ec6b"
 
-image = (
+inference_image = (
     cuda_dev_image.apt_install(
         "git",
         "libglib2.0-0",
@@ -46,20 +47,20 @@ image = (
     .env({"HF_HUB_ENABLE_HF_TRANSFER": "1", "HF_HUB_CACHE": "/cache"})
 )
 
-image = image.env(
+inference_image = inference_image.env(
     {
         "TORCHINDUCTOR_CACHE_DIR": "/root/.inductor-cache",
         "TORCHINDUCTOR_FX_GRAPH_CACHE": "1",
     }
 )
 
-image = image.add_local_python_source(
+inference_image = inference_image.add_local_python_source(
     "utils",
 )
 
-app = modal.App("headshots-app", image=image)
+app = modal.App("headshots-inference", image=inference_image)
 
-with image.imports():
+with inference_image.imports():
     import torch
     from diffusers import StableDiffusionXLInpaintPipeline, DPMSolverMultistepScheduler
     from PIL import Image
@@ -68,7 +69,7 @@ with image.imports():
     import tempfile
     import os
 
-SCALEDOWN_WINDOW = 5 * 60 # seconds
+SCALEDOWN_WINDOW = 5 * 60  # seconds
 TIMEOUT = 60 * 60  # 1 hour timeout for compilation
 
 MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
@@ -80,11 +81,12 @@ HEIGHT = 1024
 HG_HEADSHOTS_LORA_ID = "mahitm/mahitm-headshots-v1"
 HG_HEADSHOTS_WEIGHT_NAME = "headshot-step00001000.safetensors"
 
+
 @app.cls(
     gpu="L4",
     scaledown_window=SCALEDOWN_WINDOW,
-    timeout=TIMEOUT, 
-    volumes={ 
+    timeout=TIMEOUT,
+    volumes={
         "/cache": modal.Volume.from_name("hf-hub-cache", create_if_missing=True),
         "/root/.nv": modal.Volume.from_name("nv-cache", create_if_missing=True),
         "/root/.triton": modal.Volume.from_name("triton-cache", create_if_missing=True),
@@ -94,27 +96,24 @@ HG_HEADSHOTS_WEIGHT_NAME = "headshot-step00001000.safetensors"
     },
 )
 class Model:
-    compile: bool = ( 
-        modal.parameter(default=False)
-    )
+    compile: bool = modal.parameter(default=False)
 
     @modal.enter()
     def enter(self):
         pipe = StableDiffusionXLInpaintPipeline.from_pretrained(
-            MODEL_ID,
-            torch_dtype=torch.float16,
-            variant="fp16",
-            use_safetensors=True
+            MODEL_ID, torch_dtype=torch.float16, variant="fp16", use_safetensors=True
         )
 
         pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
         pipe.safety_checker = None
 
         print(f"Loading LoRA weights")
-        pipe.load_lora_weights(HG_HEADSHOTS_LORA_ID, weight_name=HG_HEADSHOTS_WEIGHT_NAME) 
+        pipe.load_lora_weights(
+            HG_HEADSHOTS_LORA_ID, weight_name=HG_HEADSHOTS_WEIGHT_NAME
+        )
         print("LoRA weights loaded.")
 
-        pipe = pipe.to("cuda") 
+        pipe = pipe.to("cuda")
 
         self.pipe = optimize(pipe, compile=self.compile)
 
@@ -135,7 +134,7 @@ class Model:
             mask.process(
                 filenames=[os.path.basename(temp_file_path)],
                 input_dir=tmp_dir,
-                output_mask_dir=tmp_dir
+                output_mask_dir=tmp_dir,
             )
             print(f"Generated mask for input image @ {tmp_dir}")
 
@@ -150,14 +149,53 @@ class Model:
             guidance_scale=GUIDANCE_SCALE,
             num_inference_steps=NUM_INFERENCE_STEPS,
             output_type="pil",
-            cross_attention_kwargs={"scale": 1.0},
+            cross_attention_kwargs={"scale": 0.8},
             strength=0.9,
         ).images[0]
 
         byte_stream = BytesIO()
         out.save(byte_stream, format="JPEG")
         return byte_stream.getvalue()
-    
+
+inference_caller_image =  modal.Image.debian_slim().pip_install(
+    "pillow==11.2.1",
+    "supabase==2.15.2"
+)
+
+@app.function(
+        image=inference_caller_image,
+        secrets=[modal.Secret.from_name("supabase-credentials")]
+    )
+def inference(
+    request_id: str,
+    prompt: str,
+    input_image: Image.Image,
+) -> None:
+    """
+    Run inference on the model with the given prompt and input image.
+    """
+    output_bytes = Model().inference.remote(prompt, input_image)
+
+    # Save the output image to a temporary file
+
+    from supabase import create_client, Client
+
+    supabase_url = os.environ.get("SUPABASE_URL")
+    supabase_key = os.environ.get("SUPABASE_KEY")
+    supabase: Client = create_client(supabase_url, supabase_key)
+
+    file_path = f"{request_id}/1.jpg"
+
+    bucket_name = "headshots"
+    response = supabase.storage.from_(bucket_name).upload(
+        path=file_path,
+        file=output_bytes,
+        file_options={"content-type": "image/jpeg"}
+    )
+
+    print("Uploaded output to:", response.full_path)
+       
+
 @app.local_entrypoint()
 def main(
     prompt: str = "A professional headshot of a person wearing a suit, high quality, studio lighting",
@@ -181,13 +219,14 @@ def main(
     print(f"Saving output to {output_path}")
     output_path.write_bytes(image_bytes)
 
+
 def optimize(pipe, compile=True):
     # fuse QKV projections in VAE
     pipe.vae.fuse_qkv_projections()
 
     # switch memory layout to Torch's preferred, channels_last
     pipe.vae.to(memory_format=torch.channels_last)
-  
+
     if not compile:
         return pipe
 

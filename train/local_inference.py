@@ -1,4 +1,4 @@
-from diffusers import StableDiffusionXLInpaintPipeline, DPMSolverMultistepScheduler # type: ignore
+from diffusers import StableDiffusionXLInpaintPipeline, DPMSolverMultistepScheduler  # type: ignore
 import torch
 from PIL import Image
 import os
@@ -8,7 +8,7 @@ from utils.format_image import format_image
 
 # --- Configuration ---
 model_id = "stabilityai/stable-diffusion-xl-base-1.0"
-lora_path = "headshot.safetensors" 
+lora_path = "headshot.safetensors"
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
 input_image_path = os.path.join(base_dir, "training_data\\images\\image_0024.jpg")
@@ -28,10 +28,7 @@ num_inference_steps_val = 30
 
 print("Loading pipeline...")
 pipe = StableDiffusionXLInpaintPipeline.from_pretrained(
-    model_id,
-    torch_dtype=torch.float16,
-    variant="fp16",
-    use_safetensors=True
+    model_id, torch_dtype=torch.float16, variant="fp16", use_safetensors=True
 )
 pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
 pipe.safety_checker = None
@@ -40,11 +37,14 @@ print("Pipeline loaded.")
 
 # --- Load LoRA ---
 from diffusers.utils.import_utils import is_safetensors_available
+
 if not is_safetensors_available():
-    raise ImportError("Please install safetensors to load LoRA weights (pip install safetensors)")
+    raise ImportError(
+        "Please install safetensors to load LoRA weights (pip install safetensors)"
+    )
 
 print(f"Loading LoRA weights from: {lora_path}")
-# pipe.load_lora_weights(lora_path, weight_name=os.path.basename(lora_path), adapter_name="headshot_lora") 
+# pipe.load_lora_weights(lora_path, weight_name=os.path.basename(lora_path), adapter_name="headshot_lora")
 print("LoRA weights loaded.")
 
 pipe.enable_model_cpu_offload()
@@ -60,19 +60,27 @@ try:
     init_image.save(os.path.join(tmp_dir, f"mask_{tmp_inference_image_filename}"))
     init_image.save(os.path.join(tmp_dir, f"cropped_{tmp_inference_image_filename}"))
 except FileNotFoundError:
-    print(f"ERROR: Input image not found at {input_image_path}. Please provide a valid path.")
+    print(
+        f"ERROR: Input image not found at {input_image_path}. Please provide a valid path."
+    )
     exit()
 
 print(f"Generating mask for input image...")
 
-#from mask_hair import process as mask_process
+# from mask_hair import process as mask_process
 from utils.mask import process as mask_process
 
-mask_process(filenames=[f"mask_{tmp_inference_image_filename}"],
-                    input_dir=tmp_dir,
-                    output_mask_dir=tmp_dir)
+mask_process(
+    filenames=[f"mask_{tmp_inference_image_filename}"],
+    input_dir=tmp_dir,
+    output_mask_dir=tmp_dir,
+)
 
-mask_image = Image.open(os.path.join(tmp_dir, f"mask_{tmp_inference_image_filename}")).convert("L").resize((image_width, image_height))
+mask_image = (
+    Image.open(os.path.join(tmp_dir, f"mask_{tmp_inference_image_filename}"))
+    .convert("L")
+    .resize((image_width, image_height))
+)
 
 os.makedirs(output_dir, exist_ok=True)
 print(f"Output directory: {output_dir}")
@@ -83,7 +91,7 @@ print(f"Output directory: {output_dir}")
 print(f"Generating {num_images_to_generate} images...")
 with torch.inference_mode():
     for i in range(num_images_to_generate):
-        print(f"Generating image {i+1}/{num_images_to_generate}...")
+        print(f"Generating image {i + 1}/{num_images_to_generate}...")
 
         image = pipe(
             prompt=prompt,
@@ -96,11 +104,11 @@ with torch.inference_mode():
             num_inference_steps=num_inference_steps_val,
             # cross_attention_kwargs={"scale": 1.0},
             # generator=generator,
-            strength=0.9
-        ).images[0] # type: ignore
+            strength=0.9,
+        ).images[0]  # type: ignore
 
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
-        output_path = f"{output_dir}/output_{timestamp}_{i+1}.png"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        output_path = f"{output_dir}/output_{timestamp}_{i + 1}.png"
         image.save(output_path)
         print(f"Saved image to {output_path}")
 

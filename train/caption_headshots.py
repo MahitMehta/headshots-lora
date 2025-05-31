@@ -23,16 +23,20 @@ Keep it short and readable, no markdown or special characters, just plain text.
 The caption should be concise, ideally under 50 words, and suitable for training an AI model.
 """
 
+
 def generate_caption(img_path):
     image_part = Part.from_image(Image.load_from_file(img_path))
 
     try:
-        response = generative_multimodal_model.generate_content([PROMPT, image_part], stream=False)
+        response = generative_multimodal_model.generate_content(
+            [PROMPT, image_part], stream=False
+        )
         print(response.usage_metadata.total_token_count, "tokens used for captioning")
         return response.text.strip()
     except Exception as e:
         print(f"⚠️ Failed to caption {img_path}: {e}")
         return None
+
 
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -51,15 +55,16 @@ def main():
             print(f"🧠 Captioning {filename}...")
             caption = generate_caption(os.path.join(IMG_DIR, filename))
             if caption:
-                #if not os.path.exists(copied_img_path):
-                    #shutil.copy2(img_path, copied_img_path)
-                    #print(f"📂 Copied {filename} to {OUTPUT_DIR}")
+                # if not os.path.exists(copied_img_path):
+                # shutil.copy2(img_path, copied_img_path)
+                # print(f"📂 Copied {filename} to {OUTPUT_DIR}")
 
                 with open(caption_path, "w") as f:
                     f.write(f"{MODEL_ID}, {caption}")
                 print(f"✅ Saved: {caption_path}")
             else:
                 print(f"❌ No caption for {filename}")
+
 
 if __name__ == "__main__":
     main()

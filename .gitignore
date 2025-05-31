@@ -9,6 +9,7 @@ train/masks/
 train/masks_hair/
 *.safetensors
 tmp
+.ruff_cache
 
 # ignore Python cache files
 __pycache__/

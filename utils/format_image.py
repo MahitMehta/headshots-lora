@@ -1,6 +1,7 @@
 from PIL.Image import Image as ImageType
 from PIL import Image
 
+
 def format_image(img: ImageType, size: int = 1024) -> ImageType:
     """Format the image to a square (top-center crop)"""
 
@@ -9,9 +10,10 @@ def format_image(img: ImageType, size: int = 1024) -> ImageType:
     top = 0
     img = img.crop((left, top, left + min_edge, top + min_edge))
 
-    img = img.resize((size, size), Image.LANCZOS) # type: ignore
+    img = img.resize((size, size), Image.LANCZOS)  # type: ignore
 
     return img
+
 
 if __name__ == "__main__":
     import os
@@ -24,6 +26,6 @@ if __name__ == "__main__":
     for idx, filename in enumerate(os.listdir(input_dir)):
         if filename.endswith((".jpg", ".jpeg", ".png")):
             img = Image.open(os.path.join(input_dir, filename))
-            img = format_image(img).convert('RGB')
+            img = format_image(img).convert("RGB")
             img.save(os.path.join(output_dir, f"image_{idx:04d}.jpg"))
             print(f"Formatted and saved {filename}")
