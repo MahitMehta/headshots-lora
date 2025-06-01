@@ -40,7 +40,6 @@ pytest-mock==3.14.1
 python-dateutil==2.9.0.post0
 realtime==2.4.3
 rich==14.0.0
-ruff==0.11.12
 shellingham==1.5.4
 sigtools==4.0.1
 six==1.17.0

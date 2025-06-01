@@ -64,7 +64,6 @@ with inference_image.imports():
     import torch
     from diffusers import StableDiffusionXLInpaintPipeline, DPMSolverMultistepScheduler
     from PIL import Image
-    from utils import mask
     from utils.format_image import resize_pad_image
     import tempfile
     import os
@@ -79,7 +78,7 @@ WIDTH = 1024
 HEIGHT = 1024
 
 HG_HEADSHOTS_LORA_ID = "mahitm/mahitm-headshots-v1"
-HG_HEADSHOTS_WEIGHT_NAME = "headshot-step00001000.safetensors"
+HG_HEADSHOTS_WEIGHT_NAME = "headshot-v1.1.safetensors"
 
 
 @app.cls(
@@ -97,6 +96,9 @@ HG_HEADSHOTS_WEIGHT_NAME = "headshot-step00001000.safetensors"
 )
 class Model:
     compile: bool = modal.parameter(default=False)
+    with_lora: bool = modal.parameter(default=True)
+    fixed_seed: bool = modal.parameter(default=False)
+    with_hair_mask: bool = modal.parameter(default=False)
 
     @modal.enter()
     def enter(self):
@@ -107,11 +109,12 @@ class Model:
         pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
         pipe.safety_checker = None
 
-        print(f"Loading LoRA weights")
-        pipe.load_lora_weights(
-            HG_HEADSHOTS_LORA_ID, weight_name=HG_HEADSHOTS_WEIGHT_NAME
-        )
-        print("LoRA weights loaded.")
+        if self.with_lora:
+            print(f"Loading LoRA weights")
+            pipe.load_lora_weights(
+                HG_HEADSHOTS_LORA_ID, weight_name=HG_HEADSHOTS_WEIGHT_NAME
+            )
+            print("LoRA weights loaded.")
 
         pipe = pipe.to("cuda")
 
@@ -131,7 +134,12 @@ class Model:
             print(f"Saved input image to temporary file: {temp_file_path}")
 
             # modify the input image in place, mask will be stored at the same location
-            mask.process(
+            if self.with_hair_mask:
+                from utils.mask_hair import process
+            else:
+                from utils.mask import process
+
+            process(
                 filenames=[os.path.basename(temp_file_path)],
                 input_dir=tmp_dir,
                 output_mask_dir=tmp_dir,
@@ -139,6 +147,10 @@ class Model:
             print(f"Generated mask for input image @ {tmp_dir}")
 
         mask_image = Image.open(temp_file_path).convert("L").resize((WIDTH, HEIGHT))
+
+        generator = torch.Generator(device=self.pipe.device)
+        if self.fixed_seed:
+            generator = generator.manual_seed(42)
 
         out = self.pipe(
             prompt=prompt,
@@ -151,6 +163,8 @@ class Model:
             output_type="pil",
             cross_attention_kwargs={"scale": 0.8},
             strength=0.9,
+            mask_content="latent_noise",
+            generator=generator,
         ).images[0]
 
         byte_stream = BytesIO()
@@ -171,11 +185,18 @@ def inference(
     request_id: str,
     prompt: str,
     input_image: Image.Image,
+    with_lora: bool = True,
+    fixed_seed: bool = False,
+    with_hair_mask: bool = False,
 ) -> None:
     """
     Run inference on the model with the given prompt and input image.
     """
-    output_bytes = Model().inference.remote(prompt, input_image)
+    output_bytes = Model(
+        with_lora=with_lora,
+        fixed_seed=fixed_seed,
+        with_hair_mask=with_hair_mask,
+    ).inference.remote(prompt, input_image)
 
     # Save the output image to a temporary file
 
