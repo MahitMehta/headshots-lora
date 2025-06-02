@@ -1,5 +1,4 @@
 import time
-from io import BytesIO
 from pathlib import Path
 from PIL import Image
 import os
@@ -31,8 +30,6 @@ inference_image = (
     )
     .pip_install(
         "peft==0.15.2",
-        "opencv-python==4.11.0.86",
-        "mediapipe==0.10.21",
         "pillow==11.2.1",
         "invisible_watermark==0.2.0",
         "transformers==4.44.0",
@@ -54,18 +51,12 @@ inference_image = inference_image.env(
     }
 )
 
-inference_image = inference_image.add_local_python_source(
-    "utils",
-)
-
 app = modal.App("headshots-inference", image=inference_image)
 
 with inference_image.imports():
     import torch
     from diffusers import StableDiffusionXLInpaintPipeline, DPMSolverMultistepScheduler
     from PIL import Image
-    from utils.format_image import resize_pad_image
-    import tempfile
     import os
 
 SCALEDOWN_WINDOW = 5 * 60  # seconds
@@ -98,7 +89,6 @@ class Model:
     compile: bool = modal.parameter(default=False)
     with_lora: bool = modal.parameter(default=True)
     fixed_seed: bool = modal.parameter(default=False)
-    with_hair_mask: bool = modal.parameter(default=False)
 
     @modal.enter()
     def enter(self):
@@ -110,7 +100,7 @@ class Model:
         pipe.safety_checker = None
 
         if self.with_lora:
-            print(f"Loading LoRA weights")
+            print("Loading LoRA weights")
             pipe.load_lora_weights(
                 HG_HEADSHOTS_LORA_ID, weight_name=HG_HEADSHOTS_WEIGHT_NAME
             )
@@ -121,36 +111,14 @@ class Model:
         self.pipe = optimize(pipe, compile=self.compile)
 
     @modal.method()
-    def inference(self, prompt: str, input_image) -> bytes:
+    def inference(
+        self, prompt: str, input_image: Image.Image, mask_image: Image.Image
+    ) -> Image.Image:
         print("Generating image with prompt:", prompt)
 
-        input_image = resize_pad_image(input_image)
-
-        tmp_dir = tempfile.gettempdir()
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
-            input_image.save(temp_file)
-            temp_file_path = temp_file.name
-            print(f"Saved input image to temporary file: {temp_file_path}")
-
-            # modify the input image in place, mask will be stored at the same location
-            if self.with_hair_mask:
-                from utils.mask_hair import process
-            else:
-                from utils.mask import process
-
-            process(
-                filenames=[os.path.basename(temp_file_path)],
-                input_dir=tmp_dir,
-                output_mask_dir=tmp_dir,
-            )
-            print(f"Generated mask for input image @ {tmp_dir}")
-
-        mask_image = Image.open(temp_file_path).convert("L").resize((WIDTH, HEIGHT))
-
-        generator = torch.Generator(device=self.pipe.device)
+        generator = None
         if self.fixed_seed:
-            generator = generator.manual_seed(42)
+            generator = torch.Generator(device=self.pipe.device).manual_seed(42)
 
         out = self.pipe(
             prompt=prompt,
@@ -167,14 +135,26 @@ class Model:
             generator=generator,
         ).images[0]
 
-        byte_stream = BytesIO()
-        out.save(byte_stream, format="JPEG")
-        return byte_stream.getvalue()
+        return out
 
 
-inference_caller_image = modal.Image.debian_slim().pip_install(
-    "pillow==11.2.1", "supabase==2.15.2"
+inference_caller_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .apt_install("libgl1", "libglib2.0-0")  # needed for OpenCV
+    .pip_install(
+        "pillow==11.2.1",
+        "supabase==2.15.2",
+        "opencv-python-headless[standard]",
+        "mediapipe==0.10.21",
+    )
 )
+
+inference_caller_image = inference_caller_image.add_local_python_source("utils")
+
+with inference_caller_image.imports():
+    from utils.format_image import get_image_inputs
+    from io import BytesIO
+    from utils.types.input import Gender
 
 
 @app.function(
@@ -182,23 +162,43 @@ inference_caller_image = modal.Image.debian_slim().pip_install(
     secrets=[modal.Secret.from_name("supabase-credentials")],
 )
 def inference(
+    user_id: str,
     request_id: str,
-    prompt: str,
+    gender: "Gender",
     input_image: Image.Image,
     with_lora: bool = True,
     fixed_seed: bool = False,
     with_hair_mask: bool = False,
-) -> None:
+) -> bool:
     """
     Run inference on the model with the given prompt and input image.
     """
-    output_bytes = Model(
-        with_lora=with_lora,
-        fixed_seed=fixed_seed,
-        with_hair_mask=with_hair_mask,
-    ).inference.remote(prompt, input_image)
 
-    # Save the output image to a temporary file
+    input_image, mask_image = get_image_inputs(input_image, with_hair_mask)
+
+    # construct prompt
+    prompt = ["mahitm-headshots-v1.1", "Professional headshot"]
+    if gender != "non-binary":
+        prompt.append(gender)
+
+    prompt.append("suit")  # default attire
+
+    prompt = ", ".join(prompt)  # comma-separated prompt
+
+    out_image = Model(with_lora=with_lora, fixed_seed=fixed_seed).inference.remote(
+        prompt, input_image, mask_image
+    )
+
+    # convert to 2:3 aspect ratio
+    target_width = 682
+    side_padding = (out_image.width - target_width) // 2
+    cropped_image = out_image.crop(
+        (side_padding, 0, target_width + side_padding, out_image.height)
+    )
+
+    byte_stream = BytesIO()
+    cropped_image.save(byte_stream, format="JPEG")
+    output_bytes = byte_stream.getvalue()
 
     from supabase import create_client, Client
 
@@ -206,38 +206,45 @@ def inference(
     supabase_key = os.environ.get("SUPABASE_KEY")
     supabase: Client = create_client(supabase_url, supabase_key)
 
-    file_path = f"{request_id}/1.jpg"
+    file_path = f"{user_id}/{request_id}/1.jpg"
 
     bucket_name = "headshots"
     response = supabase.storage.from_(bucket_name).upload(
         path=file_path, file=output_bytes, file_options={"content-type": "image/jpeg"}
     )
 
-    print("Uploaded output to:", response.full_path)
+    print("Uploaded output to:", response.fullPath)
+
+    return [file_path]  # return only the path inside the bucket
 
 
 @app.local_entrypoint()
 def main(
     prompt: str = "A professional headshot of a person wearing a suit, high quality, studio lighting",
-    twice: bool = True,
+    twice: bool = False,
     compile: bool = False,
 ):
     input_image_path = Path(__file__).parent / "../train" / "images" / "image_0001.jpg"
     input_image = Image.open(input_image_path).convert("RGB")
 
+    input_image, mask_image = get_image_inputs(input_image)
+
     t0 = time.time()
-    image_bytes = Model(compile=compile).inference.remote(prompt, input_image)
+    image = Model(compile=compile).inference.remote(prompt, input_image, mask_image)
     print(f"First inference latency: {time.time() - t0:.2f} seconds")
 
     if twice:
         t0 = time.time()
-        image_bytes = Model(compile=compile).inference.remote(prompt, input_image)
+        image = Model(compile=compile).inference.remote(prompt, input_image, mask_image)
         print(f"Second inference latency: {time.time() - t0:.2f} seconds")
 
-    output_path = Path("/tmp") / "flux" / "output.jpg"
+    output_path = (
+        Path(__file__).parent / "../output" / "inpainting_inference" / "test.jpg"
+    )
     output_path.parent.mkdir(exist_ok=True, parents=True)
+
     print(f"Saving output to {output_path}")
-    output_path.write_bytes(image_bytes)
+    image.save(output_path, format="JPEG")
 
 
 def optimize(pipe, compile=True):

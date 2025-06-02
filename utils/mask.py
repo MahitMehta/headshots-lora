@@ -36,8 +36,8 @@ def generate_mask(input_dir, filename, output_dir, face_mesh):
         # Fill polygon with black (face area)
         cv2.fillConvexPoly(mask, hull, 0)  # type: ignore
 
-    # Optional: blur edges for smooth transition
-    mask = cv2.GaussianBlur(mask, (31, 31), 0)
+    #  blur edges for smooth transition
+    mask = cv2.GaussianBlur(mask, (45, 45), 0)
 
     mask_output_path = os.path.join(output_dir, filename)
     cv2.imwrite(mask_output_path, mask)
