@@ -40,6 +40,8 @@ def resize_pad_image(img: ImageType, padding_color=(127, 127, 127)) -> ImageType
 def get_image_inputs(
     input_image: Image.Image, with_hair_mask=False
 ) -> tuple[Image.Image, Image.Image]:
+    # matches pixel orientation with the EXIF data (metadata found commonly in photos taken by cameras or smartphones)
+    input_image = ImageOps.exif_transpose(input_image)  # handle EXIF orientation
     input_image = resize_pad_image(input_image)
 
     import tempfile

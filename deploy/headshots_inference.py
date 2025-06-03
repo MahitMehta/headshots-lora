@@ -215,6 +215,18 @@ def inference(
 
     print("Uploaded output to:", response.fullPath)
 
+    (
+        supabase.table("headshots")
+        .update(
+            {
+                "status": "success",
+            }
+        )
+        .eq("id", request_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+
     return [file_path]  # return only the path inside the bucket
 
 

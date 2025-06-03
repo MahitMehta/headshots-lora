@@ -1,13 +1,14 @@
 from io import BytesIO
-import uuid
 import os
+import uuid
 
 from PIL import Image
 from supabase import create_client, Client
+from postgrest.exceptions import APIError as PostgrestAPIError
 import modal
 
 import fastapi
-from fastapi import Depends, Form, HTTPException, UploadFile, File, status
+from fastapi import Depends, Form, HTTPException, UploadFile, File, status, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -63,7 +64,7 @@ async def trigger_inference(
 
     try:
         user_response = supabase.auth.get_user(supabase_jwt)
-    except Exception as e:
+    except Exception:
         user_response = None
 
     if not user_response or not user_response.user:
@@ -77,8 +78,27 @@ async def trigger_inference(
     input_image = Image.open(BytesIO(contents))
 
     headshots_model = modal.Function.from_name("headshots-inference", "inference")
-
     request_id = str(uuid.uuid4())
+
+    try:
+        (
+            supabase.table("headshots")
+            .insert(
+                {
+                    "id": request_id,
+                    "user_id": user_response.user.id,
+                    "cost": 1,
+                    "status": "pending",
+                }
+            )
+            .execute()
+        )
+    except PostgrestAPIError:
+        return fastapi.responses.JSONResponse(
+            content={"error", "Failed to create request in database"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
     call = headshots_model.spawn(
         user_id=user_response.user.id,
         request_id=request_id,
@@ -92,15 +112,17 @@ async def trigger_inference(
     return {"call_id": call.object_id, "request_id": request_id}
 
 
-@web_app.get("/result/{call_id}")
+@web_app.get("/result")
 async def get_job_result_endpoint(
-    call_id: str, token: HTTPAuthorizationCredentials = Depends(auth_scheme)
+    call_id: str = Query(...),
+    request_id: str = Query(...),
+    token: HTTPAuthorizationCredentials = Depends(auth_scheme),
 ):
     supabase_jwt = token.credentials
 
     try:
         user_response = supabase.auth.get_user(supabase_jwt)
-    except Exception as e:
+    except Exception:
         user_response = None
 
     if not user_response or not user_response.user:
@@ -117,6 +139,10 @@ async def get_job_result_endpoint(
         print("Function call result:", result)
 
         if not result or len(result) == 0:
+            supabase.table("headshots").update(
+                {"id": request_id, "user_id": user_response.user.id, "status": "error"}
+            ).execute()
+
             return fastapi.responses.JSONResponse(
                 content={
                     "status": "error",
