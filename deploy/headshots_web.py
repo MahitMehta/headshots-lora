@@ -45,7 +45,12 @@ supabase: Client = create_client(supabase_url, supabase_key)  # type: ignore
 
 web_app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://www.mahitm.com",
+        "https://mahitm.com",
+        # for local development, alright loose auth because we have Bearer token auth
+        "http://localhost:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
