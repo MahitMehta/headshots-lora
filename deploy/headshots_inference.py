@@ -5,8 +5,6 @@ import os
 
 import modal
 
-from utils.db.headshots import upload_multiple_headshots
-
 # should be no greater than host CUDA version
 cuda_version = "12.4.0"
 # includes full CUDA toolkit
@@ -177,12 +175,11 @@ def inference(
     """
 
     from supabase import create_client, Client
+    from utils.db.headshots import set_request_status, upload_multiple_headshots
 
     supabase_url = os.environ.get("SUPABASE_URL")
     supabase_key = os.environ.get("SUPABASE_KEY")
     supabase: Client = create_client(supabase_url, supabase_key)  # type: ignore
-
-    from utils.db.headshots import set_request_status
 
     input_image, mask_image = get_image_inputs(input_image, with_hair_mask)
 
