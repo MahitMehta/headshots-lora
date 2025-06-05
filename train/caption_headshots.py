@@ -4,7 +4,7 @@ import vertexai
 from vertexai.preview.generative_models import GenerativeModel, Part, Image
 
 IMG_DIR = Path(__file__).parent / "images"
-OUTPUT_DIR = Path(__file__).parent / "captions"
+OUTPUT_DIR = Path(__file__).parent / "captions_minimal"
 CAPTION_SUFFIX = ".txt"
 
 PROJECT_ID = "mahitm-headshots"
@@ -16,12 +16,9 @@ vertexai.init(project=PROJECT_ID, location=REGION)
 generative_multimodal_model = GenerativeModel("gemini-2.0-flash-lite-001")
 
 PROMPT = """
-Describe this photo as if it's a professional headshot for use in an AI art prompt. Include hair type, skin tone, gender if obvious, camera angle, lighting, background, and anything that helps guide a LoRA model.
-
-Don't include details abour face details (except minimal beard description), expressions, or emotions. Focus on clothing and overall appearance.
-
+Describe the hair in a few words, including color, length, and style. Additionally, describe the facial border, such as beard or mustache, and any other notable features like glasses or accessories (if any).
 Keep it short and readable, no markdown or special characters, just plain text. All comma separated, no periods or other punctuation.
-The caption should be concise, ideally under 50 words, and suitable for training an AI model.
+The caption should be concise, ideally under 50 words, and suitable for LoRA training.
 """
 
 

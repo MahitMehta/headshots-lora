@@ -19,11 +19,12 @@ web_image = (
         "pillow==11.2.1",
         "supabase==2.15.2",
     )
-    .add_local_python_source("utils.types")
+    .add_local_python_source("utils.types", "utils.db")
 )
 
 with web_image.imports():
     from utils.types.input import Gender
+    from utils.db.headshots import set_request_status
 
 app = modal.App("headshots-web", image=web_image)
 web_app = fastapi.FastAPI()
@@ -39,7 +40,7 @@ def fastapi_app():
 
 supabase_url = os.environ.get("SUPABASE_URL")
 supabase_key = os.environ.get("SUPABASE_KEY")
-supabase: Client = create_client(supabase_url, supabase_key)
+supabase: Client = create_client(supabase_url, supabase_key)  # type: ignore
 
 
 web_app.add_middleware(
@@ -80,6 +81,16 @@ async def trigger_inference(
     headshots_model = modal.Function.from_name("headshots-inference", "inference")
     request_id = str(uuid.uuid4())
 
+    call = headshots_model.spawn(
+        user_id=user_response.user.id,
+        request_id=request_id,
+        gender=gender,
+        input_image=input_image,
+        with_lora=with_lora,
+        fixed_seed=fixed_seed,
+        with_hair_mask=with_hair_mask,
+    )
+
     try:
         (
             supabase.table("headshots")
@@ -98,16 +109,6 @@ async def trigger_inference(
             content={"error", "Failed to create request in database"},
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-
-    call = headshots_model.spawn(
-        user_id=user_response.user.id,
-        request_id=request_id,
-        gender=gender,
-        input_image=input_image,
-        with_lora=with_lora,
-        fixed_seed=fixed_seed,
-        with_hair_mask=with_hair_mask,
-    )
 
     return {"call_id": call.object_id, "request_id": request_id}
 
@@ -134,19 +135,19 @@ async def get_job_result_endpoint(
 
     function_call = modal.FunctionCall.from_id(call_id)
     try:
-        result: list[str] = function_call.get(timeout=0)
-
+        result, message = function_call.get(timeout=0)
         print("Function call result:", result)
 
         if not result or len(result) == 0:
-            supabase.table("headshots").update(
-                {"id": request_id, "user_id": user_response.user.id, "status": "error"}
-            ).execute()
+            set_request_status(
+                supabase,
+                request_id=request_id,
+                user_id=user_response.user.id,
+                status="error",
+            )
 
             return fastapi.responses.JSONResponse(
-                content={
-                    "status": "error",
-                },
+                content={"status": "error", "message": message},
                 status_code=200,
             )
 
@@ -161,4 +162,11 @@ async def get_job_result_endpoint(
     except TimeoutError:
         return fastapi.responses.JSONResponse(
             content={"status": "pending"}, status_code=202
+        )
+    except Exception as e:
+        print(f"Error while getting function call result: {e}")
+
+        return fastapi.responses.JSONResponse(
+            content={"status": "error"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )

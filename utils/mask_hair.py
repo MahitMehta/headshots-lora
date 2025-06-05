@@ -12,7 +12,7 @@ segmentation_threshold = 0.5  # Threshold for selfie segmentation (0.0 to 1.0)
 blur_kernel_size = (
     21,
     21,
-)  # Kernel size for Gaussian blur, e.g., (21, 21). Use (0,0) or None to disable.
+)  # Kernel size for Gaussian blur.
 # Landmarks to define the bottom of the jaw/chin for the neck cutoff
 # These are indices from the MediaPipe FaceMesh 468 landmarks.
 # Points around the chin and lower jaw.
@@ -32,7 +32,9 @@ JAW_BOTTOM_LANDMARK_INDICES = [
 NECK_CUTOFF_OFFSET_FACTOR = 0  # 0.02 # Percentage of image height to offset the cutoff line downwards from the lowest jaw point
 
 
-def generate_mask(input_dir, filename, output_dir, selfie_segmentation, face_mesh):
+def _generate_mask(
+    input_dir, filename, output_dir, output_filename, selfie_segmentation, face_mesh
+):
     img_path = os.path.join(input_dir, filename)
     image = cv2.imread(img_path)
     if image is None:
@@ -114,7 +116,7 @@ def generate_mask(input_dir, filename, output_dir, selfie_segmentation, face_mes
     if blur_kernel_size and blur_kernel_size[0] > 0 and blur_kernel_size[1] > 0:
         output_mask = cv2.GaussianBlur(output_mask, blur_kernel_size, 0)
 
-    mask_output_path = os.path.join(output_dir, filename)
+    mask_output_path = os.path.join(output_dir, output_filename)
     try:
         cv2.imwrite(mask_output_path, output_mask)
 
@@ -130,10 +132,11 @@ def generate_mask(input_dir, filename, output_dir, selfie_segmentation, face_mes
         print(f"Failed to save mask for {filename}: {e}")
 
 
-def process(
+def generate_mask(
     filenames: list[str],
     input_dir,
     output_mask_dir,
+    output_filename_prefix="",
 ):
     mp_selfie_segmentation = mp.solutions.selfie_segmentation  # type: ignore
     selfie_segmentation = mp_selfie_segmentation.SelfieSegmentation(
@@ -158,8 +161,15 @@ def process(
         if not filename.lower().endswith((".png", ".jpg", ".jpeg")):
             continue
 
-        generate_mask(
-            input_dir, filename, output_mask_dir, selfie_segmentation, face_mesh
+        output_filename = f"{output_filename_prefix}{filename}"
+
+        _generate_mask(
+            input_dir,
+            filename,
+            output_mask_dir,
+            output_filename,
+            selfie_segmentation,
+            face_mesh,
         )
 
     selfie_segmentation.close()
@@ -178,4 +188,6 @@ if __name__ == "__main__":
         for filename in os.listdir(input_dir)
         if filename.lower().endswith((".png", ".jpg", ".jpeg"))
     ]
-    process(filenames=filenames, input_dir=input_dir, output_mask_dir=output_mask_dir)
+    generate_mask(
+        filenames=filenames, input_dir=input_dir, output_mask_dir=output_mask_dir
+    )

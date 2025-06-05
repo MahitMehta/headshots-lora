@@ -7,7 +7,7 @@ from PIL import Image
 from utils.format_image import resize_pad_image
 
 
-def generate_mask(input_dir, filename, output_dir, face_mesh):
+def _generate_mask(input_dir, filename, output_dir, output_filename, face_mesh):
     img_path = os.path.join(input_dir, filename)
     image = cv2.imread(img_path)
     if image is None:
@@ -39,7 +39,7 @@ def generate_mask(input_dir, filename, output_dir, face_mesh):
     #  blur edges for smooth transition
     mask = cv2.GaussianBlur(mask, (45, 45), 0)
 
-    mask_output_path = os.path.join(output_dir, filename)
+    mask_output_path = os.path.join(output_dir, output_filename)
     cv2.imwrite(mask_output_path, mask)
 
     # add black borders to maintain 2:3 aspect ratio
@@ -52,7 +52,12 @@ def generate_mask(input_dir, filename, output_dir, face_mesh):
     print(f"Mask saved: {mask_output_path}")
 
 
-def process(filenames: list[str], input_dir, output_mask_dir):
+def generate_mask(
+    filenames: list[str],
+    input_dir,
+    output_mask_dir,
+    output_filename_prefix="",
+):
     os.makedirs(output_mask_dir, exist_ok=True)
 
     print(f"Processing images from: {input_dir}")
@@ -62,7 +67,8 @@ def process(filenames: list[str], input_dir, output_mask_dir):
     face_mesh = mp_face_mesh.FaceMesh(static_image_mode=True)
 
     for filename in filenames:
-        generate_mask(input_dir, filename, output_mask_dir, face_mesh)
+        output_filename = f"{output_filename_prefix}{filename}"
+        _generate_mask(input_dir, filename, output_mask_dir, output_filename, face_mesh)
 
     face_mesh.close()
     print("Processing complete.")
@@ -80,5 +86,5 @@ if __name__ == "__main__":
         if filename.lower().endswith((".png", ".jpg", ".jpeg"))
     ]
 
-    process(filenames, input_dir, output_mask_dir)
+    generate_mask(filenames, input_dir, output_mask_dir)
     print("Mask generation complete.")

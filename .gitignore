@@ -17,8 +17,5 @@ __pycache__/
 *.py[cod]
 .ruff_cache
 
-# config
-.vscode
-
 # misc
 training_raw

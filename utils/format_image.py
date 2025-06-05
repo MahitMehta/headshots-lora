@@ -36,10 +36,9 @@ def resize_pad_image(img: ImageType, padding_color=(127, 127, 127)) -> ImageType
     return square
 
 
-# TODO: handle when input image doesn't have a face
 def get_image_inputs(
     input_image: Image.Image, with_hair_mask=False
-) -> tuple[Image.Image, Image.Image]:
+) -> tuple[Image.Image, Image.Image | None]:
     # matches pixel orientation with the EXIF data (metadata found commonly in photos taken by cameras or smartphones)
     input_image = ImageOps.exif_transpose(input_image)  # handle EXIF orientation
     input_image = resize_pad_image(input_image)
@@ -48,26 +47,35 @@ def get_image_inputs(
 
     tmp_dir = tempfile.gettempdir()
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
-        input_image.save(temp_file)
-        temp_file_path = temp_file.name
-        print(f"Saved input image to temporary file: {temp_file_path}")
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_input_file:
+        input_image.save(temp_input_file)
+        temp_input_file_path = temp_input_file.name
+        print(f"Saved input image to temporary file: {temp_input_file_path}")
 
         # modify the input image in place, mask will be stored at the same location
         if with_hair_mask:
-            from utils.mask_hair import process
+            from utils.mask_hair import generate_mask
         else:
-            from utils.mask import process
+            from utils.mask import generate_mask
 
-        process(
-            filenames=[os.path.basename(temp_file_path)],
+        generate_mask(
+            filenames=[os.path.basename(temp_input_file_path)],
             input_dir=tmp_dir,
             output_mask_dir=tmp_dir,
+            output_filename_prefix="mask_",
         )
-        print(f"Generated mask for input image @ {tmp_dir}")
+
+        temp_mask_file_path = os.path.join(
+            tmp_dir, "mask_" + os.path.basename(temp_input_file_path)
+        )
+
+        if not os.path.exists(temp_mask_file_path):
+            return (input_image, None)
+
+        print(f"Generated mask for input image @ {temp_mask_file_path}")
 
     mask_image = (
-        Image.open(temp_file_path).convert("L").resize((final_size, final_size))
+        Image.open(temp_mask_file_path).convert("L").resize((final_size, final_size))
     )
     return input_image, mask_image
 

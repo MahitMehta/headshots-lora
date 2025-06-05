@@ -5,6 +5,8 @@ import os
 
 import modal
 
+from utils.db.headshots import upload_multiple_headshots
+
 # should be no greater than host CUDA version
 cuda_version = "12.4.0"
 # includes full CUDA toolkit
@@ -153,7 +155,6 @@ inference_caller_image = inference_caller_image.add_local_python_source("utils")
 
 with inference_caller_image.imports():
     from utils.format_image import get_image_inputs
-    from io import BytesIO
     from utils.types.input import Gender
 
 
@@ -169,12 +170,27 @@ def inference(
     with_lora: bool = True,
     fixed_seed: bool = False,
     with_hair_mask: bool = False,
-) -> bool:
+) -> tuple[list[str], str]:
     """
     Run inference on the model with the given prompt and input image.
+    Returns a list of file paths for the uploaded images and a message.
     """
 
+    from supabase import create_client, Client
+
+    supabase_url = os.environ.get("SUPABASE_URL")
+    supabase_key = os.environ.get("SUPABASE_KEY")
+    supabase: Client = create_client(supabase_url, supabase_key)  # type: ignore
+
+    from utils.db.headshots import set_request_status
+
     input_image, mask_image = get_image_inputs(input_image, with_hair_mask)
+
+    if mask_image is None:
+        set_request_status(
+            supabase, status="error", request_id=request_id, user_id=user_id
+        )
+        return [], "No face detected."
 
     # construct prompt
     prompt = ["mahitm-headshots-v1.1", "Professional headshot"]
@@ -196,38 +212,14 @@ def inference(
         (side_padding, 0, target_width + side_padding, out_image.height)
     )
 
-    byte_stream = BytesIO()
-    cropped_image.save(byte_stream, format="JPEG")
-    output_bytes = byte_stream.getvalue()
-
-    from supabase import create_client, Client
-
-    supabase_url = os.environ.get("SUPABASE_URL")
-    supabase_key = os.environ.get("SUPABASE_KEY")
-    supabase: Client = create_client(supabase_url, supabase_key)
-
-    file_path = f"{user_id}/{request_id}/1.jpg"
-
-    bucket_name = "headshots"
-    response = supabase.storage.from_(bucket_name).upload(
-        path=file_path, file=output_bytes, file_options={"content-type": "image/jpeg"}
+    file_paths = upload_multiple_headshots(
+        supabase, user_id, request_id, [cropped_image]
+    )
+    set_request_status(
+        supabase, status="success", request_id=request_id, user_id=user_id
     )
 
-    print("Uploaded output to:", response.fullPath)
-
-    (
-        supabase.table("headshots")
-        .update(
-            {
-                "status": "success",
-            }
-        )
-        .eq("id", request_id)
-        .eq("user_id", user_id)
-        .execute()
-    )
-
-    return [file_path]  # return only the path inside the bucket
+    return file_paths, "success"  # returns only the paths inside the bucket
 
 
 @app.local_entrypoint()
@@ -240,6 +232,10 @@ def main(
     input_image = Image.open(input_image_path).convert("RGB")
 
     input_image, mask_image = get_image_inputs(input_image)
+
+    if mask_image is None:
+        print("No mask image generated (No Face Found). Exiting.")
+        return
 
     t0 = time.time()
     image = Model(compile=compile).inference.remote(prompt, input_image, mask_image)
