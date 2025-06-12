@@ -6,7 +6,7 @@ Additionally, it contains the deployed inference backend on `Modal`.
 
 ## Test
 
-Visit [mahitm.com](https://www.mahitm.com/svc/headshots) to create a free account to try out this project.
+Visit [mahitm.com](https://www.mahitm.com/svc/headshot) to create a free account to try out this project.
 
 ## Train
 
