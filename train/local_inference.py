@@ -1,23 +1,24 @@
 import gc
 from pathlib import Path
-from diffusers import StableDiffusionXLInpaintPipeline, DPMSolverMultistepScheduler, StableDiffusionXLImg2ImgPipeline  # type: ignore
+from diffusers import StableDiffusionXLInpaintPipeline, DPMSolverMultistepScheduler  # type: ignore
 import torch
 from PIL import Image
 import os
 from datetime import datetime
 
 from utils.format_image import resize_pad_image
-from utils.mask_original import generate_mask as generate_original_mask
 
 # Configuration
 model_id = "stabilityai/stable-diffusion-xl-base-1.0"
 
 HG_HEADSHOTS_LORA_ID = "mahitm/mahitm-headshots-v1"
 HG_HEADSHOTS_WEIGHT_NAME = "headshot-v1.1.safetensors"
-lora_path = HG_HEADSHOTS_LORA_ID # "headshot.safetensors"
-lora_weight_name = HG_HEADSHOTS_WEIGHT_NAME # os.path.basename(lora_path)
+lora_path = HG_HEADSHOTS_LORA_ID  # "headshot.safetensors"
+lora_weight_name = HG_HEADSHOTS_WEIGHT_NAME  # os.path.basename(lora_path)
 
-input_image_path = Path(__file__).parent / "images_raw" / "mahit_2.jpg" # "images" / "image_0002.jpg"
+input_image_path = (
+    Path(__file__).parent / "images_raw" / "mahit_2.jpg"
+)  # "images" / "image_0002.jpg"
 tmp_inference_image_filename = "inference_image.jpg"
 
 tmp_dir = Path(__file__).parent / "../output" / "tmp"
@@ -41,7 +42,7 @@ base.safety_checker = None
 # base.unet = torch.compile(base.unet, mode="reduce-overhead", fullgraph=True)
 print("Base Pipeline Loaded.")
 
-# --- Load LoRA ---
+# Load LoRA
 from diffusers.utils.import_utils import is_safetensors_available
 
 if not is_safetensors_available():
@@ -50,8 +51,11 @@ if not is_safetensors_available():
     )
 
 from datetime import datetime
+
 print(f"Loading LoRA weights from: {lora_path}")
-base.load_lora_weights(lora_path, weight_name=lora_weight_name, adapter_name="headshot_lora")
+base.load_lora_weights(
+    lora_path, weight_name=lora_weight_name, adapter_name="headshot_lora"
+)
 print("LoRA weights loaded.")
 start = datetime.now()
 base.fuse_lora()
@@ -102,23 +106,21 @@ generate_mask(
     output_mask_dir=tmp_dir,
 )
 
-mask_image = (
-    Image.open(os.path.join(tmp_dir, f"mask_cropped_{tmp_inference_image_filename}"))
-    .resize((image_width, image_height))
-)
+mask_image = Image.open(
+    os.path.join(tmp_dir, f"mask_cropped_{tmp_inference_image_filename}")
+).resize((image_width, image_height))
 
 generate_mask(
     filenames=[f"cropped_{tmp_inference_image_filename}"],
     input_dir=tmp_dir,
     output_mask_dir=tmp_dir,
     output_filename_prefix="small_mask_",
-    inset=0.20
+    inset=0.20,
 )
 
-small_mask_image = (
-    Image.open(os.path.join(tmp_dir, f"small_mask_cropped_{tmp_inference_image_filename}"))
-    .resize((image_width, image_height))
-)
+small_mask_image = Image.open(
+    os.path.join(tmp_dir, f"small_mask_cropped_{tmp_inference_image_filename}")
+).resize((image_width, image_height))
 
 os.makedirs(output_dir, exist_ok=True)
 print(f"Output directory: {output_dir}")
@@ -138,12 +140,12 @@ with torch.inference_mode():
         height=image_height,
         guidance_scale=guidance_scale_val,
         num_inference_steps=num_inference_steps_val,
-        cross_attention_kwargs={"scale": 1.0 },
+        cross_attention_kwargs={"scale": 1.0},
         # generator=generator,
         strength=0.9,
         denoising_end=0.85,
         output_type="latent",
-    ).images # type: ignore
+    ).images  # type: ignore
 
     base.to("cpu")
     del base
@@ -160,8 +162,8 @@ with torch.inference_mode():
         # generator=generator,
         denoising_start=0.85,
         mask_image=small_mask_image,
-        strength=0.99
-    ).images[0] # type: ignore
+        strength=0.99,
+    ).images[0]  # type: ignore
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     output_path = f"{output_dir}/output_{timestamp}.png"

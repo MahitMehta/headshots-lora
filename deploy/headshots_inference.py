@@ -54,22 +54,26 @@ inference_image = inference_image.env(
 app = modal.App("headshots-inference", image=inference_image)
 
 with inference_image.imports():
-    import torch
-    from diffusers import StableDiffusionXLInpaintPipeline, DPMSolverMultistepScheduler
+    import torch  # type: ignore
+    from diffusers import StableDiffusionXLInpaintPipeline, DPMSolverMultistepScheduler  # type: ignore
     from PIL import Image
     import os
 
 SCALEDOWN_WINDOW = 5 * 60  # seconds
 TIMEOUT = 60 * 60  # 1 hour timeout for compilation
 
-MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
+BASE_MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
+REFINER_MODEL_ID = "stabilityai/stable-diffusion-xl-refiner-1.0"
+
 NUM_INFERENCE_STEPS = 30
-GUIDANCE_SCALE = 7.5
+GUIDANCE_SCALE = 12
 WIDTH = 1024
 HEIGHT = 1024
 
 HG_HEADSHOTS_LORA_ID = "mahitm/mahitm-headshots-v1"
 HG_HEADSHOTS_WEIGHT_NAME = "headshot-v1.1.safetensors"
+
+LORA_TRIGGER_PHRASE = "mahitm-headshots-v1.1"
 
 
 @app.cls(
@@ -92,35 +96,62 @@ class Model:
 
     @modal.enter()
     def enter(self):
-        pipe = StableDiffusionXLInpaintPipeline.from_pretrained(
-            MODEL_ID, torch_dtype=torch.float16, variant="fp16", use_safetensors=True
+        print("Loading SDXL Base")
+        base = StableDiffusionXLInpaintPipeline.from_pretrained(
+            BASE_MODEL_ID,
+            torch_dtype=torch.float16,
+            variant="fp16",
+            use_safetensors=True,
         )
 
-        pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
-        pipe.safety_checker = None
+        base.scheduler = DPMSolverMultistepScheduler.from_config(base.scheduler.config)
+        base.safety_checker = None
+
+        print("SDXL Base loaded.")
 
         if self.with_lora:
             print("Loading LoRA weights")
-            pipe.load_lora_weights(
+            base.load_lora_weights(
                 HG_HEADSHOTS_LORA_ID, weight_name=HG_HEADSHOTS_WEIGHT_NAME
             )
+            base.fuse_lora()
+            base.unload_lora_weights()
             print("LoRA weights loaded.")
 
-        pipe = pipe.to("cuda")
+        base = base.to("cuda")
+        self.base = optimize(base, compile=self.compile)
+        print("Finished SDXL Base Optimizations")
 
-        self.pipe = optimize(pipe, compile=self.compile)
+        print("Loading SDXL Refiner")
+        refiner = StableDiffusionXLInpaintPipeline.from_pretrained(
+            REFINER_MODEL_ID,
+            torch_dtype=torch.float16,
+            variant="fp16",
+            use_safetensors=True,
+        )
+        refiner.scheduler = DPMSolverMultistepScheduler.from_config(
+            base.scheduler.config
+        )
+        refiner.safety_checker = None
+        refiner = refiner.to("cuda")
+        self.refiner = optimize(refiner, compile=self.compile)
+        print("Finished SDXL Refiner Optimizations")
 
     @modal.method()
     def inference(
-        self, prompt: str, input_image: Image.Image, mask_image: Image.Image
+        self,
+        prompt: str,
+        input_image: Image.Image,
+        mask_image: Image.Image,
+        small_mask_image: Image.Image,
     ) -> Image.Image:
         print("Generating image with prompt:", prompt)
 
         generator = None
         if self.fixed_seed:
-            generator = torch.Generator(device=self.pipe.device).manual_seed(42)
+            generator = torch.Generator(device=self.base.device).manual_seed(42)
 
-        out = self.pipe(
+        base_latent = self.base(
             prompt=prompt,
             image=input_image,
             mask_image=mask_image,
@@ -128,11 +159,29 @@ class Model:
             height=HEIGHT,
             guidance_scale=GUIDANCE_SCALE,
             num_inference_steps=NUM_INFERENCE_STEPS,
-            output_type="pil",
+            output_type="latent",
             cross_attention_kwargs={"scale": 0.8},
             strength=0.9,
+            denoising_end=0.85,
             mask_content="latent_noise",
             generator=generator,
+        ).images
+
+        refiner_prompt = prompt.removeprefix(f"{LORA_TRIGGER_PHRASE},").strip()
+        print("Refining image with prompt:", refiner_prompt)
+
+        out = self.refiner(
+            prompt=refiner_prompt,
+            image=base_latent,
+            width=WIDTH,
+            height=HEIGHT,
+            guidance_scale=GUIDANCE_SCALE,
+            num_inference_steps=NUM_INFERENCE_STEPS,
+            generator=generator,
+            denoising_start=0.85,
+            mask_image=small_mask_image,
+            output_type="pil",
+            strength=0.99,
         ).images[0]
 
         return out
@@ -146,6 +195,7 @@ inference_caller_image = (
         "supabase==2.15.2",
         "opencv-python-headless[standard]",
         "mediapipe==0.10.21",
+        "vertexai==1.71.1",
     )
 )
 
@@ -158,7 +208,10 @@ with inference_caller_image.imports():
 
 @app.function(
     image=inference_caller_image,
-    secrets=[modal.Secret.from_name("supabase-credentials")],
+    secrets=[
+        modal.Secret.from_name("supabase-credentials"),
+        modal.Secret.from_name("googlecloud-secret"),
+    ],
 )
 def inference(
     user_id: str,
@@ -181,25 +234,31 @@ def inference(
     supabase_key = os.environ.get("SUPABASE_KEY")
     supabase: Client = create_client(supabase_url, supabase_key)  # type: ignore
 
-    input_image, mask_image = get_image_inputs(input_image, with_hair_mask)
+    input_image, mask_image, small_mask_image = get_image_inputs(
+        input_image, with_hair_mask
+    )
 
-    if mask_image is None:
+    if mask_image is None or small_mask_image is None:
         set_request_status(
             supabase, status="error", request_id=request_id, user_id=user_id
         )
         return [], "No face detected."
 
+    from utils.gemini.captions import get_inference_description
+
     # construct prompt
-    prompt = ["mahitm-headshots-v1.1", "Professional headshot"]
+    prompt = [LORA_TRIGGER_PHRASE, "Professional headshot"]
     if gender != "non-binary":
         prompt.append(gender)
 
     prompt.append("suit")  # default attire
 
+    prompt.extend(get_inference_description(gender, input_image))
+
     prompt = ", ".join(prompt)  # comma-separated prompt
 
     out_image = Model(with_lora=with_lora, fixed_seed=fixed_seed).inference.remote(
-        prompt, input_image, mask_image
+        prompt, input_image, mask_image, small_mask_image
     )
 
     # convert to 2:3 aspect ratio
@@ -221,26 +280,30 @@ def inference(
 
 @app.local_entrypoint()
 def main(
-    prompt: str = "A professional headshot of a person wearing a suit, high quality, studio lighting",
+    prompt: str = f"{LORA_TRIGGER_PHRASE}, Professional headshot, suit",
     twice: bool = False,
     compile: bool = False,
 ):
     input_image_path = Path(__file__).parent / "../train" / "images" / "image_0001.jpg"
     input_image = Image.open(input_image_path).convert("RGB")
 
-    input_image, mask_image = get_image_inputs(input_image)
+    input_image, mask_image, small_mask_image = get_image_inputs(input_image)
 
-    if mask_image is None:
+    if mask_image is None or small_mask_image is None:
         print("No mask image generated (No Face Found). Exiting.")
         return
 
     t0 = time.time()
-    image = Model(compile=compile).inference.remote(prompt, input_image, mask_image)
+    image = Model(compile=compile).inference.remote(
+        prompt, input_image, mask_image, small_mask_image
+    )
     print(f"First inference latency: {time.time() - t0:.2f} seconds")
 
     if twice:
         t0 = time.time()
-        image = Model(compile=compile).inference.remote(prompt, input_image, mask_image)
+        image = Model(compile=compile).inference.remote(
+            prompt, input_image, mask_image, small_mask_image
+        )
         print(f"Second inference latency: {time.time() - t0:.2f} seconds")
 
     output_path = (
@@ -252,7 +315,7 @@ def main(
     image.save(output_path, format="JPEG")
 
 
-def optimize(pipe, compile=True):
+def optimize(pipe, compile=False):
     # fuse QKV projections in VAE
     pipe.vae.fuse_qkv_projections()
 
@@ -264,10 +327,7 @@ def optimize(pipe, compile=True):
 
     torch.set_float32_matmul_precision("high")
 
-    # tag the compute-intensive modules, the VAE decoder, for compilation
-    pipe.vae.decode = torch.compile(
-        pipe.vae.decode, mode="max-autotune", fullgraph=True
-    )
+    print("Compiling UNet...")
+    pipe.unet = torch.compile(pipe.unet, mode="reduce-overhead", fullgraph=True)
 
-    print("Finished PyTorch compilation")
     return pipe

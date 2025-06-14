@@ -33,7 +33,13 @@ NECK_CUTOFF_OFFSET_FACTOR = 0  # 0.02 # Percentage of image height to offset the
 
 
 def _generate_mask(
-    input_dir, filename, output_dir, output_filename, selfie_segmentation, face_mesh
+    input_dir,
+    filename,
+    output_dir,
+    output_filename,
+    selfie_segmentation,
+    face_mesh,
+    inset: float = 0.0,
 ):
     img_path = os.path.join(input_dir, filename)
     image = cv2.imread(img_path)
@@ -137,6 +143,7 @@ def generate_mask(
     input_dir,
     output_mask_dir,
     output_filename_prefix="",
+    inset: float = 0.0,
 ):
     mp_selfie_segmentation = mp.solutions.selfie_segmentation  # type: ignore
     selfie_segmentation = mp_selfie_segmentation.SelfieSegmentation(
@@ -170,6 +177,7 @@ def generate_mask(
             output_filename,
             selfie_segmentation,
             face_mesh,
+            inset,
         )
 
     selfie_segmentation.close()

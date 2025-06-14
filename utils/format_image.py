@@ -38,7 +38,7 @@ def resize_pad_image(img: ImageType, padding_color=(127, 127, 127)) -> ImageType
 
 def get_image_inputs(
     input_image: Image.Image, with_hair_mask=False
-) -> tuple[Image.Image, Image.Image | None]:
+) -> tuple[Image.Image, Image.Image | None, Image.Image | None]:
     # matches pixel orientation with the EXIF data (metadata found commonly in photos taken by cameras or smartphones)
     input_image = ImageOps.exif_transpose(input_image)  # handle EXIF orientation
     input_image = resize_pad_image(input_image)
@@ -65,19 +65,35 @@ def get_image_inputs(
             output_filename_prefix="mask_",
         )
 
+        generate_mask(
+            filenames=[os.path.basename(temp_input_file_path)],
+            input_dir=tmp_dir,
+            output_mask_dir=tmp_dir,
+            output_filename_prefix="small_mask_",
+            inset=0.20,  # 20% inset for small mask
+        )
+
         temp_mask_file_path = os.path.join(
             tmp_dir, "mask_" + os.path.basename(temp_input_file_path)
         )
 
-        if not os.path.exists(temp_mask_file_path):
-            return (input_image, None)
+        temp_small_mask_file_path = os.path.join(
+            tmp_dir, "small_mask_" + os.path.basename(temp_input_file_path)
+        )
+
+        if not os.path.exists(temp_mask_file_path) or not os.path.exists(
+            temp_small_mask_file_path
+        ):
+            return (input_image, None, None)
 
         print(f"Generated mask for input image @ {temp_mask_file_path}")
 
-    mask_image = (
-        Image.open(temp_mask_file_path).convert("L").resize((final_size, final_size))
+    mask_image = Image.open(temp_mask_file_path).resize((final_size, final_size))
+    small_mask_image = Image.open(temp_small_mask_file_path).resize(
+        (final_size, final_size)
     )
-    return input_image, mask_image
+
+    return input_image, mask_image, small_mask_image
 
 
 if __name__ == "__main__":
