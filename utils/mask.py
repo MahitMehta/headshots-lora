@@ -7,7 +7,7 @@ from PIL import Image
 from utils.format_image import resize_pad_image
 
 
-def _generate_mask(input_dir, filename, output_dir, output_filename, face_mesh):
+def _generate_mask(input_dir, filename, output_dir, output_filename, face_mesh, inset: float = 0.0):
     img_path = os.path.join(input_dir, filename)
     image = cv2.imread(img_path)
     if image is None:
@@ -34,7 +34,17 @@ def _generate_mask(input_dir, filename, output_dir, output_filename, face_mesh):
         hull = cv2.convexHull(np.array(points))
 
         # Fill polygon with black (face area)
-        cv2.fillConvexPoly(mask, hull, 0)  # type: ignore
+        if inset > 0.0:
+            hull_points = hull.squeeze()
+            centroid = np.mean(hull_points, axis=0)
+            scale = 1.0 - inset
+
+            scaled_hull = ((hull_points - centroid) * scale + centroid).astype(np.int32)
+            scaled_hull = scaled_hull.reshape((-1, 1, 2))
+
+            cv2.fillConvexPoly(mask, scaled_hull, 0) # type: ignore 
+        else:
+            cv2.fillConvexPoly(mask, hull, 0)  # type: ignore
 
     #  blur edges for smooth transition
     mask = cv2.GaussianBlur(mask, (45, 45), 0)
@@ -57,6 +67,7 @@ def generate_mask(
     input_dir,
     output_mask_dir,
     output_filename_prefix="",
+    inset: float = 0.0,
 ):
     os.makedirs(output_mask_dir, exist_ok=True)
 
@@ -68,7 +79,7 @@ def generate_mask(
 
     for filename in filenames:
         output_filename = f"{output_filename_prefix}{filename}"
-        _generate_mask(input_dir, filename, output_mask_dir, output_filename, face_mesh)
+        _generate_mask(input_dir, filename, output_mask_dir, output_filename, face_mesh, inset)
 
     face_mesh.close()
     print("Processing complete.")
