@@ -48,7 +48,7 @@ web_app.add_middleware(
     allow_origins=[
         "https://www.mahitm.com",
         "https://mahitm.com",
-        # for local development, alright loose auth because we have Bearer token auth
+        # for local development, loose auth is alright because we have Bearer token auth
         "http://localhost:3000",
     ],
     allow_credentials=True,

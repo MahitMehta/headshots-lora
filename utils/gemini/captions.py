@@ -14,7 +14,7 @@ from vertexai.preview.generative_models import (
 from google.oauth2 import service_account
 
 
-from utils.format_image import get_image_inputs
+from utils.format import InputImageFormatter
 from utils.types.input import Gender
 
 PROJECT_ID = "mahitm-headshots"
@@ -92,13 +92,14 @@ def get_inference_description(gender: Gender, input_image: Image.Image) -> list[
 
 if __name__ == "__main__":
     import time
-    import tempfile
 
     input_image_path = Path(__file__).parent / "../../train/images/image_0000.jpg"
     input_image = Image.open(input_image_path)
-    input_image, _ = get_image_inputs(input_image)
 
-    start = time.time()
-    description = get_inference_description("male", input_image)
-    print(f"Time taken: {time.time() - start:.2f} seconds")
-    print(description)
+    with InputImageFormatter() as formatter:
+        input_image, _, _ = formatter.get_model_inputs(input_image)
+
+        start = time.time()
+        description = get_inference_description("male", input_image)
+        print(f"Caption generation took {time.time() - start:.2f} seconds")
+        print(description)

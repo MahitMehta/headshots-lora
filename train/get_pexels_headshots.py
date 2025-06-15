@@ -4,7 +4,7 @@ import os
 from PIL import Image
 from io import BytesIO
 
-from utils.format_image import resize_pad_image
+from utils.format import InputImageFormatter
 
 from dotenv import load_dotenv
 
@@ -40,8 +40,9 @@ def download_and_process():
                 if img.width < MIN_SIZE or img.height < MIN_SIZE:
                     continue
 
-                # crop to square from the top-center
-                img = resize_pad_image(img)
+                # format the image
+                with InputImageFormatter() as formatter:
+                    img = formatter.preprocess_input_image(img)
 
                 # Save image and caption
                 fname = f"img_{img_count:04d}"

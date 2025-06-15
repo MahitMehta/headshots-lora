@@ -202,8 +202,12 @@ inference_caller_image = (
 inference_caller_image = inference_caller_image.add_local_python_source("utils")
 
 with inference_caller_image.imports():
-    from utils.format_image import get_image_inputs
+    from supabase import create_client, Client
+
+    from utils.format import InputImageFormatter
     from utils.types.input import Gender
+    from utils.db.headshots import set_request_status, upload_multiple_headshots
+    from utils.gemini.captions import get_inference_description
 
 
 @app.function(
@@ -226,25 +230,20 @@ def inference(
     Run inference on the model with the given prompt and input image.
     Returns a list of file paths for the uploaded images and a message.
     """
-
-    from supabase import create_client, Client
-    from utils.db.headshots import set_request_status, upload_multiple_headshots
-
     supabase_url = os.environ.get("SUPABASE_URL")
     supabase_key = os.environ.get("SUPABASE_KEY")
     supabase: Client = create_client(supabase_url, supabase_key)  # type: ignore
 
-    input_image, mask_image, small_mask_image = get_image_inputs(
-        input_image, with_hair_mask
-    )
+    with InputImageFormatter(with_hair_mask=with_hair_mask) as formatter:
+        input_image, mask_image, small_mask_image = formatter.get_model_inputs(
+            input_image
+        )
 
     if mask_image is None or small_mask_image is None:
         set_request_status(
             supabase, status="error", request_id=request_id, user_id=user_id
         )
         return [], "No face detected."
-
-    from utils.gemini.captions import get_inference_description
 
     # construct prompt
     prompt = [LORA_TRIGGER_PHRASE, "Professional headshot"]
@@ -254,7 +253,6 @@ def inference(
     prompt.append("suit")  # default attire
 
     prompt.extend(get_inference_description(gender, input_image))
-
     prompt = ", ".join(prompt)  # comma-separated prompt
 
     out_image = Model(with_lora=with_lora, fixed_seed=fixed_seed).inference.remote(
@@ -287,7 +285,10 @@ def main(
     input_image_path = Path(__file__).parent / "../train" / "images" / "image_0001.jpg"
     input_image = Image.open(input_image_path).convert("RGB")
 
-    input_image, mask_image, small_mask_image = get_image_inputs(input_image)
+    with InputImageFormatter() as formatter:
+        input_image, mask_image, small_mask_image = formatter.get_model_inputs(
+            input_image
+        )
 
     if mask_image is None or small_mask_image is None:
         print("No mask image generated (No Face Found). Exiting.")

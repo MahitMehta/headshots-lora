@@ -6,7 +6,7 @@ from PIL import Image
 import os
 from datetime import datetime
 
-from utils.format_image import resize_pad_image
+from utils.format import InputImageFormatter
 
 # Configuration
 model_id = "stabilityai/stable-diffusion-xl-base-1.0"
@@ -19,10 +19,7 @@ lora_weight_name = HG_HEADSHOTS_WEIGHT_NAME  # os.path.basename(lora_path)
 input_image_path = (
     Path(__file__).parent / "images_raw" / "mahit_2.jpg"
 )  # "images" / "image_0002.jpg"
-tmp_inference_image_filename = "inference_image.jpg"
 
-tmp_dir = Path(__file__).parent / "../output" / "tmp"
-os.makedirs(tmp_dir, exist_ok=True)
 
 prompt = "mahitm-headshot-v1, Professional headshot, male, black suit"
 negative_prompt = ""
@@ -43,15 +40,6 @@ base.safety_checker = None
 print("Base Pipeline Loaded.")
 
 # Load LoRA
-from diffusers.utils.import_utils import is_safetensors_available
-
-if not is_safetensors_available():
-    raise ImportError(
-        "Please install safetensors to load LoRA weights (pip install safetensors)"
-    )
-
-from datetime import datetime
-
 print(f"Loading LoRA weights from: {lora_path}")
 base.load_lora_weights(
     lora_path, weight_name=lora_weight_name, adapter_name="headshot_lora"
@@ -76,51 +64,29 @@ refiner = StableDiffusionXLInpaintPipeline.from_pretrained(
     variant="fp16",
 ).to("cpu")
 
-# refiner.unet = torch.compile(refiner.unet, mode="reduce-overhead", fullgraph=True)
 refiner.enable_model_cpu_offload()
 refiner.enable_attention_slicing()
 refiner.enable_xformers_memory_efficient_attention()
 torch.backends.cuda.matmul.allow_tf32 = True
 print("Refiner Pipeline Loaded.")
 
-# --- Load Input Image and Mask ---
+# Load Input Image and Mask
 print(f"Loading input image from: {input_image_path}")
 try:
-    input_image = resize_pad_image(Image.open(input_image_path))
-    input_image.save(os.path.join(tmp_dir, f"cropped_{tmp_inference_image_filename}"))
+    input_image = Image.open(input_image_path)
 except FileNotFoundError:
     print(
         f"ERROR: Input image not found at {input_image_path}. Please provide a valid path."
     )
     exit()
 
-print(f"Generating mask for input image...")
+print("Generating model inputs")
 
-# from utils.mask_hair import generate_mask
-from utils.mask import generate_mask
+with InputImageFormatter(with_hair_mask=False) as formatter:
+    input_image, mask_image, small_mask_image = base.get_model_inputs(
+        input_image, width=image_width, height=image_height
+    )
 
-generate_mask(
-    filenames=[f"cropped_{tmp_inference_image_filename}"],
-    input_dir=tmp_dir,
-    output_filename_prefix="mask_",
-    output_mask_dir=tmp_dir,
-)
-
-mask_image = Image.open(
-    os.path.join(tmp_dir, f"mask_cropped_{tmp_inference_image_filename}")
-).resize((image_width, image_height))
-
-generate_mask(
-    filenames=[f"cropped_{tmp_inference_image_filename}"],
-    input_dir=tmp_dir,
-    output_mask_dir=tmp_dir,
-    output_filename_prefix="small_mask_",
-    inset=0.20,
-)
-
-small_mask_image = Image.open(
-    os.path.join(tmp_dir, f"small_mask_cropped_{tmp_inference_image_filename}")
-).resize((image_width, image_height))
 
 os.makedirs(output_dir, exist_ok=True)
 print(f"Output directory: {output_dir}")
@@ -129,7 +95,7 @@ print(f"Output directory: {output_dir}")
 # generator = torch.Generator(device=base.device).manual_seed(42)
 
 with torch.inference_mode():
-    print(f"Generating image...")
+    print("Generating image...")
 
     latent = base(
         prompt=prompt,
