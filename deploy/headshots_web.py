@@ -23,7 +23,7 @@ web_image = (
 )
 
 with web_image.imports():
-    from utils.types.input import Gender
+    from utils.types.input import Gender, AspectRatio
     from utils.db.headshots import set_request_status
 
 app = modal.App("headshots-web", image=web_image)
@@ -65,6 +65,7 @@ async def trigger_inference(
     with_lora: bool = Form(True),  # Default to True for LoRA usage,
     fixed_seed: bool = Form(False),  # Default to False for fixed seed
     with_hair_mask: bool = Form(False),
+    aspect_ratio: AspectRatio = Form("2:3"),
 ):
     supabase_jwt = token.credentials
 
@@ -94,6 +95,7 @@ async def trigger_inference(
         with_lora=with_lora,
         fixed_seed=fixed_seed,
         with_hair_mask=with_hair_mask,
+        aspect_ratio=aspect_ratio,
     )
 
     try:

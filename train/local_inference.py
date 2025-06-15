@@ -82,7 +82,7 @@ except FileNotFoundError:
 
 print("Generating model inputs")
 
-with InputImageFormatter(with_hair_mask=False) as formatter:
+with InputImageFormatter() as formatter:
     input_image, mask_image, small_mask_image = base.get_model_inputs(
         input_image, width=image_width, height=image_height
     )

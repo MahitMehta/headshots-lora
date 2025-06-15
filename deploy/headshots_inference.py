@@ -205,9 +205,11 @@ with inference_caller_image.imports():
     from supabase import create_client, Client
 
     from utils.format import InputImageFormatter
-    from utils.types.input import Gender
+    from utils.types.input import Gender, AspectRatio
     from utils.db.headshots import set_request_status, upload_multiple_headshots
     from utils.gemini.captions import get_inference_description
+
+    formatter = InputImageFormatter()
 
 
 @app.function(
@@ -225,6 +227,7 @@ def inference(
     with_lora: bool = True,
     fixed_seed: bool = False,
     with_hair_mask: bool = False,
+    aspect_ratio: "AspectRatio" = "2:3",
 ) -> tuple[list[str], str]:
     """
     Run inference on the model with the given prompt and input image.
@@ -234,11 +237,10 @@ def inference(
     supabase_key = os.environ.get("SUPABASE_KEY")
     supabase: Client = create_client(supabase_url, supabase_key)  # type: ignore
 
-    with InputImageFormatter(with_hair_mask=with_hair_mask) as formatter:
-        input_image, mask_image, small_mask_image = formatter.get_model_inputs(
-            input_image
-        )
-
+    formatter.set_aspect_ratio(aspect_ratio)
+    input_image, mask_image, small_mask_image = formatter.get_model_inputs(
+        input_image, with_hair_mask=with_hair_mask
+    )
     if mask_image is None or small_mask_image is None:
         set_request_status(
             supabase, status="error", request_id=request_id, user_id=user_id
@@ -259,8 +261,8 @@ def inference(
         prompt, input_image, mask_image, small_mask_image
     )
 
-    # convert to 2:3 aspect ratio
-    target_width = 682
+    # crop to width set by formatter
+    target_width = formatter.content_width
     side_padding = (out_image.width - target_width) // 2
     cropped_image = out_image.crop(
         (side_padding, 0, target_width + side_padding, out_image.height)
