@@ -6,7 +6,7 @@ Additionally, it contains the deployed inference backend on `Modal`.
 
 | Original | Headshots-v1 Output |
 | ------------- | ------------- |
-| <img src="https://github.com/user-attachments/assets/de8bf7a6-208b-43c2-acc1-9a4059326293" width="300px" />|<img width="300px" src="https://github.com/user-attachments/assets/e8a8d391-17fa-44c5-be87-343c6dbcf2fb" />|
+| <img src="https://github.com/user-attachments/assets/de8bf7a6-208b-43c2-acc1-9a4059326293" width="300px" />|<img width="200px" src="https://github.com/user-attachments/assets/e8a8d391-17fa-44c5-be87-343c6dbcf2fb" />|
 
 ## Test
 
